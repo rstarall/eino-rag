@@ -1,11 +1,19 @@
 # 开发环境Dockerfile，支持热重载和调试
 FROM golang:1.23-alpine AS base
 
+# 设置Go环境变量
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOSUMDB=sum.golang.google.cn
+ENV GO111MODULE=on
+
 # 安装必要工具
-RUN apk add --no-cache git curl
+RUN apk add --no-cache git curl ca-certificates
+
+# 更新CA证书
+RUN update-ca-certificates
 
 # 安装Air热重载工具
-RUN go install github.com/cosmtrek/air@latest
+RUN go install github.com/cosmtrek/air@v1.52.3
 
 # 安装Delve调试器
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
