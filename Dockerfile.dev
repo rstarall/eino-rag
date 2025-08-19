@@ -16,7 +16,7 @@ RUN apk update && apk add --no-cache git curl ca-certificates
 RUN update-ca-certificates
 
 # 安装Air热重载工具
-RUN go install github.com/cosmtrek/air@v1.52.3
+RUN go install github.com/air-verse/air@latest
 
 # 安装Delve调试器
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
