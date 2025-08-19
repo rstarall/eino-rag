@@ -1,0 +1,32 @@
+# 开发环境Dockerfile，支持热重载和调试
+FROM golang:1.23-alpine AS base
+
+# 安装必要工具
+RUN apk add --no-cache git curl
+
+# 安装Air热重载工具
+RUN go install github.com/cosmtrek/air@latest
+
+# 安装Delve调试器
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制go.mod和go.sum
+COPY go.mod go.sum ./
+
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 确保Air配置文件存在
+RUN if [ ! -f .air.toml ]; then air init; fi
+
+# 暴露端口
+EXPOSE 8080 2345
+
+# 默认命令使用Air进行热重载
+CMD ["air", "-c", ".air.toml"]

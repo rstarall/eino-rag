@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  eino-rag-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+      - "2345:2345"  # Delve调试端口
+    env_file:
+      - .env
+    environment:
+      # 连接到宿主机上的 milvus 服务 (来自 host_env/docker-compose.lightrag.yaml)
+      - MILVUS_HOST=host.docker.internal
+      - MILVUS_PORT=19530
+      # 连接到宿主机上的 ollama 服务 (来自 host_env/docker-compose.dev.yaml)
+      - OLLAMA_URL=http://host.docker.internal:11434
+      # 使用 bge-m3 嵌入模型
+      - EMBEDDING_MODEL=bge-m3
+      - GIN_MODE=debug
+      # 其他环境变量将从 .env 文件中读取
+    volumes:
+      - ./:/app
+      - /app/bin  # 排除二进制文件目录
+    working_dir: /app
+    command: air -c .air.toml
+    # 添加额外主机映射以访问宿主机服务
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

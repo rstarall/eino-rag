@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chat System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📚 文档管理</h2>
+            </div>
+            
+            <!-- 文件上传区域 -->
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <svg class="upload-icon" viewBox="0 0 24 24">
+                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                    </svg>
+                    <p>拖拽文件到此处或点击上传</p>
+                    <input type="file" id="fileInput" accept=".txt,.md,.pdf,.doc,.docx" multiple>
+                </div>
+                <div id="uploadProgress" class="upload-progress hidden">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="progress-text">0%</span>
+                </div>
+            </div>
+            
+            <!-- 已上传文档列表 -->
+            <div class="documents-section">
+                <h3>已索引文档</h3>
+                <div id="documentsList" class="documents-list">
+                    <div class="empty-state">暂无文档</div>
+                </div>
+            </div>
+            
+            <!-- 系统状态 -->
+            <div class="status-section">
+                <h3>系统状态</h3>
+                <div class="status-item">
+                    <span class="status-label">连接状态:</span>
+                    <span id="connectionStatus" class="status-value status-offline">离线</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">文档数量:</span>
+                    <span id="docCount" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">向量维度:</span>
+                    <span id="vectorDim" class="status-value">768</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 主聊天区域 -->
+        <div class="main-content">
+            <div class="chat-header">
+                <h1>🤖 RAG Chat Assistant</h1>
+                <div class="header-actions">
+                    <button id="clearChat" class="btn btn-secondary">清空对话</button>
+                    <button id="exportChat" class="btn btn-secondary">导出对话</button>
+                </div>
+            </div>
+            
+            <!-- 聊天消息区域 -->
+            <div id="chatMessages" class="chat-messages">
+                <div class="welcome-message">
+                    <h2>👋 欢迎使用 RAG 聊天系统</h2>
+                    <p>上传文档后，我可以基于文档内容回答您的问题</p>
+                    <div class="quick-actions">
+                        <button class="quick-action" data-query="系统是如何工作的？">系统是如何工作的？</button>
+                        <button class="quick-action" data-query="支持哪些文件格式？">支持哪些文件格式？</button>
+                        <button class="quick-action" data-query="如何提高搜索准确度？">如何提高搜索准确度？</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 输入区域 -->
+            <div class="chat-input-container">
+                <div class="input-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showContext" checked>
+                        <span>显示检索上下文</span>
+                    </label>
+                    <label class="slider-label">
+                        <span>Top K: </span>
+                        <input type="range" id="topK" min="1" max="10" value="5">
+                        <span id="topKValue">5</span>
+                    </label>
+                </div>
+                <div class="chat-input">
+                    <textarea id="messageInput" placeholder="输入您的问题..." rows="1"></textarea>
+                    <button id="sendButton" class="send-button">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
