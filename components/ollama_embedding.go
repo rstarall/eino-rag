@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/schema"
+	"go.uber.org/zap"
 )
 
 // OllamaEmbedding 实现 Eino 的 Embedding 接口
@@ -17,13 +19,15 @@ type OllamaEmbedding struct {
 	baseURL string
 	model   string
 	dim     int
+	logger  *zap.Logger
 }
 
-func NewOllamaEmbedding(baseURL, model string, dim int) *OllamaEmbedding {
+func NewOllamaEmbedding(baseURL, model string, dim int, logger *zap.Logger) *OllamaEmbedding {
 	return &OllamaEmbedding{
 		baseURL: baseURL,
 		model:   model,
 		dim:     dim,
+		logger:  logger,
 	}
 }
 
@@ -82,14 +86,49 @@ func (o *OllamaEmbedding) EmbedStrings(ctx context.Context, texts []string, opts
 }
 
 func (o *OllamaEmbedding) EmbedDocuments(ctx context.Context, docs []*schema.Document, opts ...embedding.Option) ([]*schema.Document, error) {
+	o.logger.Info("开始生成文档嵌入向量", 
+		zap.Int("document_count", len(docs)),
+		zap.String("model", o.model),
+		zap.String("base_url", o.baseURL),
+		zap.Int("expected_dimension", o.dim))
+
 	texts := make([]string, len(docs))
+	totalTextLength := 0
 	for i, doc := range docs {
 		texts[i] = doc.Content
+		totalTextLength += len(doc.Content)
+		o.logger.Debug("文档信息", 
+			zap.Int("doc_index", i),
+			zap.String("doc_id", doc.ID),
+			zap.Int("content_length", len(doc.Content)),
+			zap.String("content_preview", doc.Content[:min(50, len(doc.Content))]))
 	}
 
+	o.logger.Info("文档统计信息", 
+		zap.Int("total_documents", len(docs)),
+		zap.Int("total_text_length", totalTextLength),
+		zap.Int("average_text_length", totalTextLength/len(docs)))
+
+	startTime := time.Now()
 	embeddings, err := o.EmbedStrings(ctx, texts, opts...)
+	embeddingDuration := time.Since(startTime)
+	
 	if err != nil {
+		o.logger.Error("生成嵌入向量失败", 
+			zap.Error(err),
+			zap.Duration("embedding_duration", embeddingDuration))
 		return nil, err
+	}
+
+	o.logger.Info("嵌入向量生成完成", 
+		zap.Int("embedding_count", len(embeddings)),
+		zap.Duration("embedding_duration", embeddingDuration))
+
+	// 验证嵌入向量维度
+	if len(embeddings) > 0 && len(embeddings[0]) != o.dim {
+		o.logger.Warn("嵌入向量维度不匹配", 
+			zap.Int("expected_dim", o.dim),
+			zap.Int("actual_dim", len(embeddings[0])))
 	}
 
 	result := make([]*schema.Document, len(docs))
@@ -110,11 +149,20 @@ func (o *OllamaEmbedding) EmbedDocuments(ctx context.Context, docs []*schema.Doc
 			float32Embedding[j] = float32(v)
 		}
 		newDoc.MetaData["embedding"] = float32Embedding
+		
+		o.logger.Debug("文档嵌入向量信息", 
+			zap.String("doc_id", doc.ID),
+			zap.Int("embedding_dimension", len(float32Embedding)),
+			zap.Float32("first_value", float32Embedding[0]))
+		
 		result[i] = newDoc
 	}
 
+	o.logger.Info("文档嵌入处理完成", zap.Int("processed_documents", len(result)))
 	return result, nil
 }
+
+
 
 func (o *OllamaEmbedding) Dimension() int {
 	return o.dim

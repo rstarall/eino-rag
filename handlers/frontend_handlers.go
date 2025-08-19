@@ -121,10 +121,20 @@ func (h *APIHandler) sendSSEEvent(w http.ResponseWriter, eventType string, data 
 func (h *APIHandler) convertDocsForSSE(docs []*schema.Document) []map[string]interface{} {
 	results := make([]map[string]interface{}, len(docs))
 	for i, doc := range docs {
+		// 从metadata中获取实际的相似度分数
+		var score float64 = 0.0
+		if doc.MetaData != nil {
+			if similarityScore, exists := doc.MetaData["similarity_score"]; exists {
+				if scoreFloat, ok := similarityScore.(float64); ok {
+					score = scoreFloat
+				}
+			}
+		}
+		
 		results[i] = map[string]interface{}{
 			"id":       doc.ID,
 			"content":  doc.Content,
-			"score":    0.0, // Score字段暂时设为0
+			"score":    score,
 			"metadata": doc.MetaData,
 		}
 	}
@@ -253,9 +263,4 @@ func (h *APIHandler) GetDocuments(c *gin.Context) {
 	})
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+

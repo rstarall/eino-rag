@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/eino-ext/components/document/transformer/splitter/semantic"
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/schema"
+	"go.uber.org/zap"
 )
 
 type DocumentProcessor struct {
@@ -20,6 +21,7 @@ type DocumentProcessor struct {
 	maxChunkSize        int
 	enableSemanticSplit bool
 	embeddingCache      *EmbeddingCache
+	logger              *zap.Logger
 }
 
 // EmbeddingCache 嵌入向量缓存
@@ -34,13 +36,14 @@ func NewEmbeddingCache() *EmbeddingCache {
 	}
 }
 
-func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize int, enableSemanticSplit bool) (*DocumentProcessor, error) {
+func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize int, enableSemanticSplit bool, logger *zap.Logger) (*DocumentProcessor, error) {
 	processor := &DocumentProcessor{
 		embedding:           embedding,
 		minChunkSize:        minChunkSize,
 		maxChunkSize:        maxChunkSize,
 		enableSemanticSplit: enableSemanticSplit,
 		embeddingCache:      NewEmbeddingCache(),
+		logger:              logger,
 	}
 
 	// 根据官方文档初始化语义分割器
@@ -71,14 +74,26 @@ func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize
 }
 
 func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interface{}) ([]*schema.Document, error) {
+	p.logger.Info("开始处理文档文本", 
+		zap.Int("text_length", len([]rune(text))),
+		zap.Bool("semantic_splitting_enabled", p.enableSemanticSplit),
+		zap.Int("min_chunk_size", p.minChunkSize),
+		zap.Int("max_chunk_size", p.maxChunkSize))
+
 	// 性能优化：根据文本大小和配置选择处理策略
 	textLength := len([]rune(text))
 
 	// 小文档或禁用语义分割时使用传统分块（避免嵌入开销）
 	// 小于 CHUNK_SIZE 的文档不需要语义分割
 	if !p.enableSemanticSplit || textLength < p.minChunkSize {
+		p.logger.Info("使用传统分块方法", 
+			zap.Bool("semantic_splitting_disabled", !p.enableSemanticSplit),
+			zap.Bool("text_too_small", textLength < p.minChunkSize),
+			zap.Int("text_length", textLength))
 		return p.processTextLegacy(text, metadata), nil
 	}
+
+	p.logger.Info("使用语义分割方法", zap.Int("text_length", textLength))
 
 	// 记录处理开始时间（用于性能分析）
 	startTime := time.Now()
@@ -88,12 +103,14 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 			metadata = make(map[string]interface{})
 		}
 		metadata["processing_time_ms"] = processingTime.Milliseconds()
+		p.logger.Debug("文档处理完成", zap.Duration("processing_time", processingTime))
 	}()
 
 	ctx := context.Background()
 
 	// 生成文档ID
 	docID := fmt.Sprintf("%x", md5.Sum([]byte(text)))
+	p.logger.Debug("生成文档ID", zap.String("doc_id", docID))
 
 	// 创建原始文档对象
 	originalDoc := &schema.Document{
@@ -103,15 +120,25 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 	}
 
 	// 使用语义分割器进行智能分割
+	p.logger.Debug("开始语义分割")
 	chunks, err := p.splitter.Transform(ctx, []*schema.Document{originalDoc})
 	if err != nil {
+		p.logger.Warn("语义分割失败，回退到传统分块", zap.Error(err))
 		// 语义分割失败时回退到传统分块
 		return p.processTextLegacy(text, metadata), nil
 	}
 
+	p.logger.Info("语义分割完成", zap.Int("initial_chunk_count", len(chunks)))
+
 	// 为每个分块添加元数据和ID
 	var processedChunks []*schema.Document
 	for i, chunk := range chunks {
+		chunkLength := len([]rune(chunk.Content))
+		p.logger.Debug("处理分块", 
+			zap.Int("chunk_index", i),
+			zap.Int("chunk_length", chunkLength),
+			zap.String("chunk_preview", chunk.Content[:min(100, len(chunk.Content))]))
+
 		// 生成新的chunk ID
 		chunkID := fmt.Sprintf("%s_%d", docID, i)
 
@@ -125,12 +152,20 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 		chunkMeta["parent_id"] = docID
 		chunkMeta["chunk_index"] = i
 		chunkMeta["chunk_total"] = len(chunks)
-		chunkMeta["content_length"] = len([]rune(chunk.Content))
+		chunkMeta["content_length"] = chunkLength
 		chunkMeta["splitting_method"] = "semantic"
 
 		// 如果分块太长，进行额外的递归分割
-		if len([]rune(chunk.Content)) > p.maxChunkSize {
+		if chunkLength > p.maxChunkSize {
+			p.logger.Debug("分块过长，进行递归分割", 
+				zap.Int("chunk_length", chunkLength),
+				zap.Int("max_chunk_size", p.maxChunkSize))
+			
 			subChunks := p.recursiveSplit(chunk.Content, p.maxChunkSize)
+			p.logger.Debug("递归分割完成", 
+				zap.Int("original_chunk_index", i),
+				zap.Int("sub_chunk_count", len(subChunks)))
+
 			for j, subChunk := range subChunks {
 				subChunkID := fmt.Sprintf("%s_%d_%d", docID, i, j)
 				subChunkMeta := make(map[string]interface{})
@@ -139,6 +174,10 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 				}
 				subChunkMeta["sub_chunk_index"] = j
 				subChunkMeta["is_sub_chunk"] = true
+
+				p.logger.Debug("创建子分块", 
+					zap.String("sub_chunk_id", subChunkID),
+					zap.Int("sub_chunk_length", len([]rune(subChunk))))
 
 				processedChunk := &schema.Document{
 					ID:       subChunkID,
@@ -149,6 +188,7 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 			}
 		} else {
 			// 直接使用语义分割的结果
+			p.logger.Debug("分块大小合适，直接使用", zap.String("chunk_id", chunkID))
 			processedChunk := &schema.Document{
 				ID:       chunkID,
 				Content:  chunk.Content,
@@ -158,7 +198,19 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 		}
 	}
 
+	p.logger.Info("文档分块处理完成", 
+		zap.Int("final_chunk_count", len(processedChunks)),
+		zap.Int("original_chunk_count", len(chunks)))
+
 	return processedChunks, nil
+}
+
+// min 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // recursiveSplit 递归分割过长的文本块

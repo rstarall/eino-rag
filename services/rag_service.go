@@ -4,25 +4,29 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"eino-rag/components"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"go.uber.org/zap"
 )
 
 type RAGService struct {
 	retriever   *components.MilvusRetriever
 	processor   *components.DocumentProcessor
 	searchChain interface{} // 临时使用interface{}，因为类型定义可能有变化
+	logger      *zap.Logger
 }
 
-func NewRAGService(retriever *components.MilvusRetriever, processor *components.DocumentProcessor) (*RAGService, error) {
+func NewRAGService(retriever *components.MilvusRetriever, processor *components.DocumentProcessor, logger *zap.Logger) (*RAGService, error) {
 	ctx := context.Background()
 
 	service := &RAGService{
 		retriever: retriever,
 		processor: processor,
+		logger:    logger,
 	}
 
 	// 构建RAG搜索链
@@ -55,14 +59,62 @@ func (s *RAGService) buildSearchChain(ctx context.Context) error {
 }
 
 func (s *RAGService) IndexDocument(ctx context.Context, content string, metadata map[string]interface{}) error {
+	s.logger.Info("开始索引文档", 
+		zap.Int("content_length", len(content)),
+		zap.Any("metadata", metadata))
+
 	// 处理文档为chunks（使用语义分割）
+	s.logger.Debug("开始文档处理和分块")
+	processStart := time.Now()
 	chunks, err := s.processor.ProcessText(content, metadata)
+	processDuration := time.Since(processStart)
+	
 	if err != nil {
+		s.logger.Error("文档处理失败", 
+			zap.Error(err),
+			zap.Duration("process_duration", processDuration))
 		return fmt.Errorf("failed to process document: %w", err)
 	}
 
+	s.logger.Info("文档处理完成", 
+		zap.Int("chunk_count", len(chunks)),
+		zap.Duration("process_duration", processDuration))
+
+	// 记录分块信息
+	for i, chunk := range chunks {
+		s.logger.Debug("分块信息", 
+			zap.Int("chunk_index", i),
+			zap.String("chunk_id", chunk.ID),
+			zap.Int("chunk_length", len(chunk.Content)),
+			zap.String("chunk_preview", chunk.Content[:min(50, len(chunk.Content))]))
+	}
+
 	// 添加到检索器
-	return s.retriever.AddDocuments(ctx, chunks)
+	s.logger.Debug("开始添加文档到向量数据库")
+	addStart := time.Now()
+	err = s.retriever.AddDocuments(ctx, chunks)
+	addDuration := time.Since(addStart)
+	
+	if err != nil {
+		s.logger.Error("添加文档到向量数据库失败", 
+			zap.Error(err),
+			zap.Duration("add_duration", addDuration))
+		return err
+	}
+
+	s.logger.Info("文档索引完成", 
+		zap.Int("chunk_count", len(chunks)),
+		zap.Duration("add_duration", addDuration))
+
+	return nil
+}
+
+// min 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *RAGService) Search(ctx context.Context, query string) ([]*schema.Document, error) {

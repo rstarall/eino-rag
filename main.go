@@ -31,6 +31,7 @@ func main() {
 		cfg.OllamaBaseURL,
 		cfg.EmbeddingModel,
 		cfg.VectorDimension,
+		logger,
 	)
 
 	// 初始化Milvus检索器
@@ -40,6 +41,7 @@ func main() {
 		cfg.CollectionName,
 		embedding,
 		cfg.TopK,
+		logger,
 	)
 	if err != nil {
 		logger.Fatal("Failed to create retriever", zap.Error(err))
@@ -52,13 +54,14 @@ func main() {
 		cfg.ChunkSize,         // 作为最小分块大小
 		cfg.ChunkSize*3,       // 最大分块大小
 		cfg.SemanticSplitting, // 是否启用语义分割
+		logger,                // 传递logger
 	)
 	if err != nil {
 		logger.Fatal("Failed to create document processor", zap.Error(err))
 	}
 
 	// 初始化RAG服务
-	ragService, err := services.NewRAGService(retriever, processor)
+	ragService, err := services.NewRAGService(retriever, processor, logger)
 	if err != nil {
 		logger.Fatal("Failed to create RAG service", zap.Error(err))
 	}
@@ -90,7 +93,7 @@ func main() {
 	}
 
 	// 初始化API处理器
-	apiHandler := handlers.NewAPIHandler(ragService, cfg.MaxUploadSize, chatModel)
+	apiHandler := handlers.NewAPIHandler(ragService, cfg.MaxUploadSize, chatModel, logger)
 
 	// 设置Gin路由
 	router := gin.New()
