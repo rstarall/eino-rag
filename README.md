@@ -153,7 +153,7 @@ make dev
 3. **访问服务**
 ```bash
 # Web界面
-http://localhost:8080
+http://localhost:8888
 
 # 调试端口（如果需要）
 http://localhost:2345

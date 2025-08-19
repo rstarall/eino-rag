@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "8888:8080"
       - "2345:2345"  # Delve调试端口
     env_file:
       - .env
