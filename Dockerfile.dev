@@ -15,8 +15,8 @@ RUN apk update && apk add --no-cache git curl ca-certificates
 # 更新CA证书
 RUN update-ca-certificates
 
-# 安装Air热重载工具
-RUN go install github.com/air-verse/air@latest
+# 安装Air热重载工具（使用兼容Go 1.23的版本）
+RUN go install github.com/air-verse/air@v1.61.1
 
 # 安装Delve调试器
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
