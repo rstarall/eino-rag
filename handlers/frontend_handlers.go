@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // 添加到 APIHandler 结构体
@@ -130,7 +131,7 @@ func (h *APIHandler) convertDocsForSSE(docs []*schema.Document) []map[string]int
 				}
 			}
 		}
-		
+
 		results[i] = map[string]interface{}{
 			"id":       doc.ID,
 			"content":  doc.Content,
@@ -162,8 +163,19 @@ func (h *APIHandler) buildRAGMessages(query string, docs []*schema.Document, top
 		maxDocs := min(topK, len(docs))
 		for i, doc := range docs[:maxDocs] {
 			maxLength := min(500, len(doc.Content))
+
+			// 从元数据中获取相似度分数
+			var score float64 = 0.0
+			if doc.MetaData != nil {
+				if similarityScore, exists := doc.MetaData["similarity_score"]; exists {
+					if scoreFloat, ok := similarityScore.(float64); ok {
+						score = scoreFloat
+					}
+				}
+			}
+
 			contextBuilder.WriteString(fmt.Sprintf("文档 %d (相关度: %.3f):\n%s\n\n",
-				i+1, doc.Score, doc.Content[:maxLength]))
+				i+1, score, doc.Content[:maxLength]))
 		}
 
 		// 添加上下文消息
@@ -254,13 +266,26 @@ func (h *APIHandler) generateFallbackResponse(query string, docs []*schema.Docum
 
 // GetDocuments 获取已索引的文档列表
 func (h *APIHandler) GetDocuments(c *gin.Context) {
-	// 这里应该从数据库获取文档列表
-	// 示例返回
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	h.logger.Debug("处理获取文档列表请求")
+
+	// 从 RAG 服务获取文档列表
+	documents, err := h.ragService.GetDocuments(ctx)
+	if err != nil {
+		h.logger.Error("获取文档列表失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
-		"count":     0,
-		"documents": []gin.H{},
+		"count":     len(documents),
+		"documents": documents,
 	})
 }
-
-

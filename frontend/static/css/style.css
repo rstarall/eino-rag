@@ -503,6 +503,56 @@ body {
     }
 }
 
+/* Toast 通知样式 */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(400px);
+    transition: transform 0.3s ease-in-out;
+    max-width: 350px;
+    word-wrap: break-word;
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.toast-success {
+    background-color: var(--success-color);
+}
+
+.toast-error {
+    background-color: var(--danger-color);
+}
+
+.toast-warning {
+    background-color: var(--warning-color);
+}
+
+.toast-info {
+    background-color: var(--primary-color);
+}
+
+/* 多个toast堆叠 */
+.toast:nth-of-type(2) {
+    top: 80px;
+}
+
+.toast:nth-of-type(3) {
+    top: 140px;
+}
+
+.toast:nth-of-type(4) {
+    top: 200px;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     .sidebar {
@@ -523,5 +573,29 @@ body {
     
     .message-content {
         max-width: 85%;
+    }
+    
+    .toast {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+        transform: translateY(-100px);
+        top: 10px;
+    }
+    
+    .toast.show {
+        transform: translateY(0);
+    }
+    
+    .toast:nth-of-type(2) {
+        top: 70px;
+    }
+    
+    .toast:nth-of-type(3) {
+        top: 130px;
+    }
+    
+    .toast:nth-of-type(4) {
+        top: 190px;
     }
 }

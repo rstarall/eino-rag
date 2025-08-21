@@ -12,14 +12,18 @@ import (
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
+
+	"eino-rag/config"
 )
 
 type DocumentProcessor struct {
 	splitter            document.Transformer
 	embedding           *OllamaEmbedding
-	minChunkSize        int
-	maxChunkSize        int
-	enableSemanticSplit bool
+	chunkSize           int                     // 分块大小（字符数）
+	chunkOverlap        int                     // 分块重叠大小（字符数）
+	chunkingStrategy    config.ChunkingStrategy // 分块策略
+	maxChunkSize        int                     // 最大分块大小（用于语义分块后的递归分割）
+	enableSemanticSplit bool                    // 向后兼容字段
 	embeddingCache      *EmbeddingCache
 	logger              *zap.Logger
 }
@@ -36,10 +40,55 @@ func NewEmbeddingCache() *EmbeddingCache {
 	}
 }
 
-func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize int, enableSemanticSplit bool, logger *zap.Logger) (*DocumentProcessor, error) {
+// NewDocumentProcessorWithStrategy 创建支持新分块策略的文档处理器
+func NewDocumentProcessorWithStrategy(embedding *OllamaEmbedding, chunkSize, chunkOverlap int, strategy config.ChunkingStrategy, logger *zap.Logger) (*DocumentProcessor, error) {
 	processor := &DocumentProcessor{
 		embedding:           embedding,
-		minChunkSize:        minChunkSize,
+		chunkSize:           chunkSize,
+		chunkOverlap:        chunkOverlap,
+		chunkingStrategy:    strategy,
+		maxChunkSize:        chunkSize * 3, // 最大分块大小为普通分块大小的3倍
+		enableSemanticSplit: strategy == config.ChunkingStrategySemantic,
+		embeddingCache:      NewEmbeddingCache(),
+		logger:              logger,
+	}
+
+	// 如果使用语义分割，初始化语义分割器
+	if strategy == config.ChunkingStrategySemantic {
+		ctx := context.Background()
+		splitter, err := semantic.NewSplitter(ctx, &semantic.Config{
+			Embedding:    embedding,
+			BufferSize:   2,
+			MinChunkSize: chunkSize,
+			Separators:   []string{"\n\n", "\n", "。", ".", "！", "!", "？", "?", "；", ";", "，", ","},
+			Percentile:   0.85,
+			LenFunc: func(s string) int {
+				return len([]rune(s))
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create semantic splitter: %w", err)
+		}
+		processor.splitter = splitter
+	}
+
+	return processor, nil
+}
+
+// NewDocumentProcessor 保留向后兼容的构造函数
+func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize int, enableSemanticSplit bool, logger *zap.Logger) (*DocumentProcessor, error) {
+	var strategy config.ChunkingStrategy
+	if enableSemanticSplit {
+		strategy = config.ChunkingStrategySemantic
+	} else {
+		strategy = config.ChunkingStrategyWordBased // 向后兼容使用原来的word-based方式
+	}
+
+	processor := &DocumentProcessor{
+		embedding:           embedding,
+		chunkSize:           minChunkSize,
+		chunkOverlap:        minChunkSize / 10, // 默认重叠为分块大小的10%
+		chunkingStrategy:    strategy,
 		maxChunkSize:        maxChunkSize,
 		enableSemanticSplit: enableSemanticSplit,
 		embeddingCache:      NewEmbeddingCache(),
@@ -73,29 +122,103 @@ func NewDocumentProcessor(embedding *OllamaEmbedding, minChunkSize, maxChunkSize
 	return processor, nil
 }
 
-func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interface{}) ([]*schema.Document, error) {
-	p.logger.Info("开始处理文档文本", 
-		zap.Int("text_length", len([]rune(text))),
-		zap.Bool("semantic_splitting_enabled", p.enableSemanticSplit),
-		zap.Int("min_chunk_size", p.minChunkSize),
-		zap.Int("max_chunk_size", p.maxChunkSize))
+// processTextByLength 基于字符长度的分块处理（支持滑动窗口）
+func (p *DocumentProcessor) processTextByLength(text string, metadata map[string]interface{}) []*schema.Document {
+	// 生成文档ID
+	docID := fmt.Sprintf("%x", md5.Sum([]byte(text)))
 
-	// 性能优化：根据文本大小和配置选择处理策略
-	textLength := len([]rune(text))
+	// 将文本转为rune数组以正确处理中文字符
+	runes := []rune(text)
+	textLength := len(runes)
 
-	// 小文档或禁用语义分割时使用传统分块（避免嵌入开销）
-	// 小于 CHUNK_SIZE 的文档不需要语义分割
-	if !p.enableSemanticSplit || textLength < p.minChunkSize {
-		p.logger.Info("使用传统分块方法", 
-			zap.Bool("semantic_splitting_disabled", !p.enableSemanticSplit),
-			zap.Bool("text_too_small", textLength < p.minChunkSize),
-			zap.Int("text_length", textLength))
-		return p.processTextLegacy(text, metadata), nil
+	var chunks []*schema.Document
+
+	// 如果文本长度小于等于分块大小，直接返回整个文本
+	if textLength <= p.chunkSize {
+		chunkMeta := make(map[string]interface{})
+		for k, v := range metadata {
+			chunkMeta[k] = v
+		}
+		chunkMeta["parent_id"] = docID
+		chunkMeta["chunk_index"] = 0
+		chunkMeta["chunk_total"] = 1
+		chunkMeta["content_length"] = textLength
+		chunkMeta["splitting_method"] = "length_based"
+
+		chunk := &schema.Document{
+			ID:       fmt.Sprintf("%s_0", docID),
+			Content:  text,
+			MetaData: chunkMeta,
+		}
+		return []*schema.Document{chunk}
 	}
 
-	p.logger.Info("使用语义分割方法", zap.Int("text_length", textLength))
+	// 使用滑动窗口进行分块
+	chunkIndex := 0
+	for start := 0; start < textLength; start += (p.chunkSize - p.chunkOverlap) {
+		end := start + p.chunkSize
+		if end > textLength {
+			end = textLength
+		}
 
-	// 记录处理开始时间（用于性能分析）
+		// 提取分块内容
+		chunkContent := string(runes[start:end])
+
+		// 如果这是最后一个分块且长度太短，合并到前一个分块
+		if end == textLength && len([]rune(chunkContent)) < p.chunkOverlap && len(chunks) > 0 {
+			lastChunk := chunks[len(chunks)-1]
+			lastChunk.Content += chunkContent
+			lastChunk.MetaData["content_length"] = len([]rune(lastChunk.Content))
+			break
+		}
+
+		chunkMeta := make(map[string]interface{})
+		for k, v := range metadata {
+			chunkMeta[k] = v
+		}
+		chunkMeta["parent_id"] = docID
+		chunkMeta["chunk_index"] = chunkIndex
+		chunkMeta["content_length"] = len([]rune(chunkContent))
+		chunkMeta["splitting_method"] = "length_based"
+		chunkMeta["chunk_start"] = start
+		chunkMeta["chunk_end"] = end
+
+		chunk := &schema.Document{
+			ID:       fmt.Sprintf("%s_%d", docID, chunkIndex),
+			Content:  chunkContent,
+			MetaData: chunkMeta,
+		}
+		chunks = append(chunks, chunk)
+		chunkIndex++
+
+		// 如果已经到达文本末尾，退出循环
+		if end >= textLength {
+			break
+		}
+	}
+
+	// 更新总分块数量
+	for _, chunk := range chunks {
+		chunk.MetaData["chunk_total"] = len(chunks)
+	}
+
+	p.logger.Info("长度分块完成",
+		zap.Int("text_length", textLength),
+		zap.Int("chunk_size", p.chunkSize),
+		zap.Int("chunk_overlap", p.chunkOverlap),
+		zap.Int("chunk_count", len(chunks)))
+
+	return chunks
+}
+
+func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interface{}) ([]*schema.Document, error) {
+	p.logger.Info("开始处理文档文本",
+		zap.Int("text_length", len([]rune(text))),
+		zap.String("chunking_strategy", string(p.chunkingStrategy)),
+		zap.Int("chunk_size", p.chunkSize),
+		zap.Int("chunk_overlap", p.chunkOverlap))
+
+	// 记录处理开始时间
 	startTime := time.Now()
 	defer func() {
 		processingTime := time.Since(startTime)
@@ -106,11 +229,38 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 		p.logger.Debug("文档处理完成", zap.Duration("processing_time", processingTime))
 	}()
 
-	ctx := context.Background()
+	// 根据分块策略选择处理方法
+	switch p.chunkingStrategy {
+	case config.ChunkingStrategyLength:
+		p.logger.Info("使用长度分块方法")
+		return p.processTextByLength(text, metadata), nil
 
-	// 生成文档ID
+	case config.ChunkingStrategySemantic:
+		p.logger.Info("使用语义分割方法")
+		return p.processTextSemantic(text, metadata)
+
+	case config.ChunkingStrategyWordBased:
+		p.logger.Info("使用基于单词的分块方法（向后兼容）")
+		return p.processTextLegacy(text, metadata), nil
+
+	default:
+		p.logger.Warn("未知的分块策略，使用长度分块", zap.String("strategy", string(p.chunkingStrategy)))
+		return p.processTextByLength(text, metadata), nil
+	}
+}
+
+// processTextSemantic 语义分割处理方法
+func (p *DocumentProcessor) processTextSemantic(text string, metadata map[string]interface{}) ([]*schema.Document, error) {
+	textLength := len([]rune(text))
+
+	// 小文档直接使用长度分块（避免语义分割的开销）
+	if textLength < p.chunkSize {
+		p.logger.Info("文本过短，使用长度分块替代语义分割", zap.Int("text_length", textLength))
+		return p.processTextByLength(text, metadata), nil
+	}
+
+	ctx := context.Background()
 	docID := fmt.Sprintf("%x", md5.Sum([]byte(text)))
-	p.logger.Debug("生成文档ID", zap.String("doc_id", docID))
 
 	// 创建原始文档对象
 	originalDoc := &schema.Document{
@@ -119,53 +269,35 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 		MetaData: metadata,
 	}
 
-	// 使用语义分割器进行智能分割
+	// 使用语义分割器进行分割
 	p.logger.Debug("开始语义分割")
 	chunks, err := p.splitter.Transform(ctx, []*schema.Document{originalDoc})
 	if err != nil {
-		p.logger.Warn("语义分割失败，回退到传统分块", zap.Error(err))
-		// 语义分割失败时回退到传统分块
-		return p.processTextLegacy(text, metadata), nil
+		p.logger.Warn("语义分割失败，回退到长度分块", zap.Error(err))
+		return p.processTextByLength(text, metadata), nil
 	}
 
 	p.logger.Info("语义分割完成", zap.Int("initial_chunk_count", len(chunks)))
 
-	// 为每个分块添加元数据和ID
+	// 处理语义分割的结果
 	var processedChunks []*schema.Document
 	for i, chunk := range chunks {
 		chunkLength := len([]rune(chunk.Content))
-		p.logger.Debug("处理分块", 
-			zap.Int("chunk_index", i),
-			zap.Int("chunk_length", chunkLength),
-			zap.String("chunk_preview", chunk.Content[:min(100, len(chunk.Content))]))
 
-		// 生成新的chunk ID
-		chunkID := fmt.Sprintf("%s_%d", docID, i)
-
-		// 复制原始元数据
+		// 复制元数据
 		chunkMeta := make(map[string]interface{})
 		for k, v := range metadata {
 			chunkMeta[k] = v
 		}
-
-		// 添加分块特定的元数据
 		chunkMeta["parent_id"] = docID
 		chunkMeta["chunk_index"] = i
 		chunkMeta["chunk_total"] = len(chunks)
 		chunkMeta["content_length"] = chunkLength
 		chunkMeta["splitting_method"] = "semantic"
 
-		// 如果分块太长，进行额外的递归分割
+		// 如果分块太长，进行递归分割
 		if chunkLength > p.maxChunkSize {
-			p.logger.Debug("分块过长，进行递归分割", 
-				zap.Int("chunk_length", chunkLength),
-				zap.Int("max_chunk_size", p.maxChunkSize))
-			
 			subChunks := p.recursiveSplit(chunk.Content, p.maxChunkSize)
-			p.logger.Debug("递归分割完成", 
-				zap.Int("original_chunk_index", i),
-				zap.Int("sub_chunk_count", len(subChunks)))
-
 			for j, subChunk := range subChunks {
 				subChunkID := fmt.Sprintf("%s_%d_%d", docID, i, j)
 				subChunkMeta := make(map[string]interface{})
@@ -175,10 +307,6 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 				subChunkMeta["sub_chunk_index"] = j
 				subChunkMeta["is_sub_chunk"] = true
 
-				p.logger.Debug("创建子分块", 
-					zap.String("sub_chunk_id", subChunkID),
-					zap.Int("sub_chunk_length", len([]rune(subChunk))))
-
 				processedChunk := &schema.Document{
 					ID:       subChunkID,
 					Content:  subChunk,
@@ -187,8 +315,7 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 				processedChunks = append(processedChunks, processedChunk)
 			}
 		} else {
-			// 直接使用语义分割的结果
-			p.logger.Debug("分块大小合适，直接使用", zap.String("chunk_id", chunkID))
+			chunkID := fmt.Sprintf("%s_%d", docID, i)
 			processedChunk := &schema.Document{
 				ID:       chunkID,
 				Content:  chunk.Content,
@@ -198,10 +325,7 @@ func (p *DocumentProcessor) ProcessText(text string, metadata map[string]interfa
 		}
 	}
 
-	p.logger.Info("文档分块处理完成", 
-		zap.Int("final_chunk_count", len(processedChunks)),
-		zap.Int("original_chunk_count", len(chunks)))
-
+	p.logger.Info("语义分割处理完成", zap.Int("final_chunk_count", len(processedChunks)))
 	return processedChunks, nil
 }
 
@@ -261,7 +385,7 @@ func (p *DocumentProcessor) recursiveSplit(text string, maxSize int) []string {
 
 // processTextLegacy 内部使用的传统分块方法
 func (p *DocumentProcessor) processTextLegacy(text string, metadata map[string]interface{}) []*schema.Document {
-	return p.ProcessTextLegacy(text, metadata, p.minChunkSize/5, 10) // 转换字符数为大概的单词数
+	return p.ProcessTextLegacy(text, metadata, p.chunkSize/5, 10) // 转换字符数为大概的单词数
 }
 
 // ProcessTextLegacy 提供向后兼容的简单分块方法
@@ -309,9 +433,11 @@ func (p *DocumentProcessor) ProcessTextLegacy(text string, metadata map[string]i
 // GetProcessingStats 获取处理统计信息
 func (p *DocumentProcessor) GetProcessingStats() map[string]interface{} {
 	stats := map[string]interface{}{
-		"semantic_splitting_enabled": p.enableSemanticSplit,
-		"min_chunk_size":             p.minChunkSize,
+		"chunking_strategy":          string(p.chunkingStrategy),
+		"chunk_size":                 p.chunkSize,
+		"chunk_overlap":              p.chunkOverlap,
 		"max_chunk_size":             p.maxChunkSize,
+		"semantic_splitting_enabled": p.enableSemanticSplit,
 		"has_semantic_splitter":      p.splitter != nil,
 	}
 
@@ -341,7 +467,7 @@ func (p *DocumentProcessor) SetSemanticSplitting(enable bool) error {
 		splitter, err := semantic.NewSplitter(ctx, &semantic.Config{
 			Embedding:    p.embedding,
 			BufferSize:   2,
-			MinChunkSize: p.minChunkSize,
+			MinChunkSize: p.chunkSize,
 			Separators:   []string{"\n\n", "\n", "。", ".", "！", "!", "？", "?", "；", ";", "，", ","},
 			Percentile:   0.85,
 			LenFunc: func(s string) int {

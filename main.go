@@ -15,8 +15,34 @@ import (
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
+
+	_ "eino-rag/docs" // swagger文档
 )
+
+// @title Eino RAG API
+// @version 1.0
+// @description 基于Eino框架的RAG(检索增强生成)系统API
+// @description 支持文档上传、向量化索引、语义搜索等功能
+// @termsOfService http://www.github.com/rstarall
+
+// @contact.name API Support
+// @contact.url http://www.github.com/rstarall
+// @contact.email http://www.github.com/rstarall
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8080
+// @BasePath /
+// @schemes http https
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
+// @description Bearer token authentication
 
 func main() {
 	// 初始化日志
@@ -42,19 +68,23 @@ func main() {
 		embedding,
 		cfg.TopK,
 		logger,
+		cfg.MilvusConnectTimeout,
+		cfg.GRPCKeepaliveTime,
+		cfg.GRPCKeepaliveTimeout,
+		cfg.MilvusInsertTimeout,
 	)
 	if err != nil {
 		logger.Fatal("Failed to create retriever", zap.Error(err))
 	}
 	defer retriever.Close()
 
-	// 初始化文档处理器（使用语义分割）
-	processor, err := components.NewDocumentProcessor(
-		embedding,             // 使用同一个嵌入器进行语义分割
-		cfg.ChunkSize,         // 作为最小分块大小
-		cfg.ChunkSize*3,       // 最大分块大小
-		cfg.SemanticSplitting, // 是否启用语义分割
-		logger,                // 传递logger
+	// 初始化文档处理器（使用新的分块策略）
+	processor, err := components.NewDocumentProcessorWithStrategy(
+		embedding,            // 使用嵌入器
+		cfg.ChunkSize,        // 分块大小
+		cfg.ChunkOverlap,     // 分块重叠
+		cfg.ChunkingStrategy, // 分块策略
+		logger,               // 传递logger
 	)
 	if err != nil {
 		logger.Fatal("Failed to create document processor", zap.Error(err))
@@ -93,7 +123,7 @@ func main() {
 	}
 
 	// 初始化API处理器
-	apiHandler := handlers.NewAPIHandler(ragService, cfg.MaxUploadSize, chatModel, logger)
+	apiHandler := handlers.NewAPIHandler(ragService, cfg.MaxUploadSize, chatModel, logger, cfg)
 
 	// 设置Gin路由
 	router := gin.New()
@@ -105,6 +135,11 @@ func main() {
 
 	// 设置前端路由和API路由
 	apiHandler.SetupFrontendRoutes(router)
+
+	// 配置Swagger路由
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	logger.Info("Swagger documentation available at: /swagger/index.html")
 
 	// 启动服务器
 	srv := &http.Server{

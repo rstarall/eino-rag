@@ -5,6 +5,18 @@ import (
 	"strconv"
 )
 
+// ChunkingStrategy 分块策略类型
+type ChunkingStrategy string
+
+const (
+	// ChunkingStrategyLength 基于长度的分块（支持滑动窗口）
+	ChunkingStrategyLength ChunkingStrategy = "length"
+	// ChunkingStrategySemantic 语义分块
+	ChunkingStrategySemantic ChunkingStrategy = "semantic"
+	// ChunkingStrategyWordBased 基于单词的分块（向后兼容）
+	ChunkingStrategyWordBased ChunkingStrategy = "word_based"
+)
+
 type Config struct {
 	// Milvus配置
 	MilvusHost      string
@@ -25,16 +37,27 @@ type Config struct {
 	OpenAIBaseURL string
 
 	// RAG配置
-	ChunkSize             int     // 最小分块大小（用于语义分割）
-	ChunkOverlap          int     // 保留向后兼容（已废弃）
-	TopK                  int     // 检索返回文档数量
-	ScoreThreshold        float32 // 相似度阈值
-	SemanticSplitting     bool    // 是否启用语义分割
-	EmbeddingCacheEnabled bool    // 是否启用嵌入缓存
+	ChunkSize             int              // 分块大小（字符数）
+	ChunkOverlap          int              // 分块重叠大小（字符数）
+	ChunkingStrategy      ChunkingStrategy // 分块策略
+	TopK                  int              // 检索返回文档数量
+	ScoreThreshold        float32          // 相似度阈值
+	SemanticSplitting     bool             // 向后兼容：是否启用语义分割（已废弃，使用ChunkingStrategy代替）
+	EmbeddingCacheEnabled bool             // 是否启用嵌入缓存
 
 	// Server配置
 	ServerPort    string
 	MaxUploadSize int64
+
+	// 超时配置
+	IndexTimeout         int // 文档索引总超时时间（秒）
+	MilvusInsertTimeout  int // Milvus插入操作超时时间（秒）
+	MilvusConnectTimeout int // Milvus连接超时时间（秒）
+	GRPCKeepaliveTime    int // gRPC keepalive时间（秒）
+	GRPCKeepaliveTimeout int // gRPC keepalive超时时间（秒）
+
+	// PDF解析配置 - 现在固定使用 ledongthuc/pdf 库进行解析
+	// 移除了复杂的配置选项，简化为只支持单一快速解析器
 }
 
 func Load() *Config {
@@ -56,13 +79,22 @@ func Load() *Config {
 
 		ChunkSize:             getEnvAsInt("CHUNK_SIZE", 500),
 		ChunkOverlap:          getEnvAsInt("CHUNK_OVERLAP", 50),
+		ChunkingStrategy:      ChunkingStrategy(getEnv("CHUNKING_STRATEGY", string(ChunkingStrategyLength))), // 默认使用长度分块
 		TopK:                  getEnvAsInt("TOP_K", 5),
 		ScoreThreshold:        float32(getEnvAsFloat("SCORE_THRESHOLD", 0.7)),
-		SemanticSplitting:     getEnv("SEMANTIC_SPLITTING", "true") == "true",
+		SemanticSplitting:     getEnv("SEMANTIC_SPLITTING", "false") == "true", // 默认关闭语义分割
 		EmbeddingCacheEnabled: getEnv("EMBEDDING_CACHE", "true") == "true",
 
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		MaxUploadSize: getEnvAsInt64("MAX_UPLOAD_SIZE", 10*1024*1024),
+
+		IndexTimeout:         getEnvAsInt("INDEX_TIMEOUT", 120),
+		MilvusInsertTimeout:  getEnvAsInt("MILVUS_INSERT_TIMEOUT", 60),
+		MilvusConnectTimeout: getEnvAsInt("MILVUS_CONNECT_TIMEOUT", 30),
+		GRPCKeepaliveTime:    getEnvAsInt("GRPC_KEEPALIVE_TIME", 30),
+		GRPCKeepaliveTimeout: getEnvAsInt("GRPC_KEEPALIVE_TIMEOUT", 5),
+
+		// PDF配置已简化，不再需要额外配置
 	}
 }
 

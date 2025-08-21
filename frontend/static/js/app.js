@@ -36,8 +36,7 @@ class RAGChatApp {
     }
     
     initEventListeners() {
-        // 文件上传
-        this.uploadArea.addEventListener('click', () => this.fileInput.click());
+        // 文件上传 - 由于CSS已经让input覆盖整个uploadArea，所以不需要手动触发click
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e.target.files));
         
         // 拖拽上传
@@ -46,8 +45,11 @@ class RAGChatApp {
             this.uploadArea.classList.add('dragging');
         });
         
-        this.uploadArea.addEventListener('dragleave', () => {
-            this.uploadArea.classList.remove('dragging');
+        this.uploadArea.addEventListener('dragleave', (e) => {
+            // 只有当离开uploadArea本身时才移除样式，避免子元素触发
+            if (!this.uploadArea.contains(e.relatedTarget)) {
+                this.uploadArea.classList.remove('dragging');
+            }
         });
         
         this.uploadArea.addEventListener('drop', (e) => {
@@ -104,6 +106,8 @@ class RAGChatApp {
         const progressFill = this.uploadProgress.querySelector('.progress-fill');
         const progressText = this.uploadProgress.querySelector('.progress-text');
         
+        let uploadComplete = false; // 防止重复通知
+        
         try {
             const xhr = new XMLHttpRequest();
             
@@ -116,12 +120,23 @@ class RAGChatApp {
             });
             
             xhr.addEventListener('load', () => {
+                if (uploadComplete) return; // 防止重复处理
+                uploadComplete = true;
+                
                 if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    this.showNotification('文件上传成功', 'success');
-                    this.loadDocuments();
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.success) {
+                            this.showNotification('文件上传成功', 'success');
+                            this.loadDocuments();
+                        } else {
+                            this.showNotification(`上传失败: ${response.message || '未知错误'}`, 'error');
+                        }
+                    } catch (e) {
+                        this.showNotification('文件上传失败: 响应解析错误', 'error');
+                    }
                 } else {
-                    this.showNotification('文件上传失败', 'error');
+                    this.showNotification(`文件上传失败: HTTP ${xhr.status}`, 'error');
                 }
                 
                 setTimeout(() => {
@@ -132,7 +147,10 @@ class RAGChatApp {
             });
             
             xhr.addEventListener('error', () => {
-                this.showNotification('文件上传失败', 'error');
+                if (uploadComplete) return; // 防止重复处理
+                uploadComplete = true;
+                
+                this.showNotification('网络错误，文件上传失败', 'error');
                 this.uploadProgress.classList.add('hidden');
             });
             
@@ -140,6 +158,9 @@ class RAGChatApp {
             xhr.send(formData);
             
         } catch (error) {
+            if (uploadComplete) return; // 防止重复处理
+            uploadComplete = true;
+            
             console.error('Upload error:', error);
             this.showNotification('文件上传失败', 'error');
             this.uploadProgress.classList.add('hidden');
@@ -416,10 +437,30 @@ class RAGChatApp {
     }
     
     showNotification(message, type = 'info') {
-        // 这里可以实现更美观的通知提示
         console.log(`[${type}] ${message}`);
-        // 可以使用第三方库如 toastify 或自己实现
-        alert(message);
+        
+        // 创建toast通知元素
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        // 添加到页面
+        document.body.appendChild(toast);
+        
+        // 显示动画
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+        
+        // 自动消失
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
     }
 }
 

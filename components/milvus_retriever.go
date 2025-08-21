@@ -11,6 +11,8 @@ import (
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 // MilvusRetriever 实现 Eino 的 Retriever 接口
@@ -20,12 +22,13 @@ type MilvusRetriever struct {
 	embedding      *OllamaEmbedding
 	topK           int
 	logger         *zap.Logger
+	insertTimeout  int // 插入操作超时时间（秒）
 }
 
-func NewMilvusRetriever(host string, port int, collection string, embedding *OllamaEmbedding, topK int, logger *zap.Logger) (*MilvusRetriever, error) {
+func NewMilvusRetriever(host string, port int, collection string, embedding *OllamaEmbedding, topK int, logger *zap.Logger, connectTimeout, keepaliveTime, keepaliveTimeout, insertTimeout int) (*MilvusRetriever, error) {
 	ctx := context.Background()
 
-	logger.Info("初始化Milvus连接", 
+	logger.Info("初始化Milvus连接",
 		zap.String("host", host),
 		zap.Int("port", port),
 		zap.String("collection", collection),
@@ -34,6 +37,13 @@ func NewMilvusRetriever(host string, port int, collection string, embedding *Oll
 
 	c, err := client.NewClient(ctx, client.Config{
 		Address: fmt.Sprintf("%s:%d", host, port),
+		DialOptions: []grpc.DialOption{
+			grpc.WithTimeout(time.Duration(connectTimeout) * time.Second),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    time.Duration(keepaliveTime) * time.Second,
+				Timeout: time.Duration(keepaliveTimeout) * time.Second,
+			}),
+		},
 	})
 	if err != nil {
 		logger.Error("连接Milvus失败", zap.Error(err))
@@ -46,6 +56,7 @@ func NewMilvusRetriever(host string, port int, collection string, embedding *Oll
 		embedding:      embedding,
 		topK:           topK,
 		logger:         logger,
+		insertTimeout:  insertTimeout,
 	}
 
 	// 初始化集合
@@ -64,22 +75,22 @@ func (m *MilvusRetriever) initCollection(ctx context.Context) error {
 	}
 
 	expectedDim := m.embedding.Dimension()
-	
+
 	if has {
-		m.logger.Info("集合已存在，检查维度兼容性", 
+		m.logger.Info("集合已存在，检查维度兼容性",
 			zap.String("collection", m.collectionName),
 			zap.Int("expected_dim", expectedDim))
-		
+
 		// 检查现有集合的维度
 		err = m.validateCollectionDimension(ctx, expectedDim)
 		if err != nil {
 			return err
 		}
 	} else {
-		m.logger.Info("集合不存在，创建新集合", 
+		m.logger.Info("集合不存在，创建新集合",
 			zap.String("collection", m.collectionName),
 			zap.Int("vector_dim", expectedDim))
-		
+
 		err = m.createCollection(ctx, expectedDim)
 		if err != nil {
 			return err
@@ -93,7 +104,7 @@ func (m *MilvusRetriever) initCollection(ctx context.Context) error {
 		m.logger.Error("加载集合失败", zap.Error(err))
 		return err
 	}
-	
+
 	m.logger.Info("集合初始化完成", zap.String("collection", m.collectionName))
 	return nil
 }
@@ -106,28 +117,28 @@ func (m *MilvusRetriever) validateCollectionDimension(ctx context.Context, expec
 		m.logger.Error("获取集合描述失败", zap.Error(err))
 		return fmt.Errorf("failed to describe collection: %w", err)
 	}
-	
+
 	// 查找embedding字段的维度
 	for _, field := range desc.Schema.Fields {
 		if field.Name == "embedding" && field.DataType == entity.FieldTypeFloatVector {
 			if dimStr, exists := field.TypeParams["dim"]; exists {
 				if actualDim := parseInt(dimStr); actualDim > 0 {
 					if actualDim != expectedDim {
-						m.logger.Error("集合维度不匹配", 
+						m.logger.Error("集合维度不匹配",
 							zap.String("collection", m.collectionName),
 							zap.Int("expected_dim", expectedDim),
 							zap.Int("actual_dim", actualDim))
-						return fmt.Errorf("collection %s has vector dimension %d, but expected %d. Please use a different collection name or update VECTOR_DIM in .env", 
+						return fmt.Errorf("collection %s has vector dimension %d, but expected %d. Please use a different collection name or update VECTOR_DIM in .env",
 							m.collectionName, actualDim, expectedDim)
 					}
-					m.logger.Info("集合维度验证通过", 
+					m.logger.Info("集合维度验证通过",
 						zap.Int("dimension", actualDim))
 					return nil
 				}
 			}
 		}
 	}
-	
+
 	return fmt.Errorf("could not find embedding field dimension in collection %s", m.collectionName)
 }
 
@@ -147,11 +158,11 @@ func (m *MilvusRetriever) createCollection(ctx context.Context, vectorDim int) e
 				DataType:   entity.FieldTypeVarChar,
 				TypeParams: map[string]string{"max_length": "65535"},
 			},
-										{
-					Name:       "metadata",
-					DataType:   entity.FieldTypeVarChar,
-					TypeParams: map[string]string{"max_length": "65535"},
-				},
+			{
+				Name:       "metadata",
+				DataType:   entity.FieldTypeVarChar,
+				TypeParams: map[string]string{"max_length": "65535"},
+			},
 			{
 				Name:       "embedding",
 				DataType:   entity.FieldTypeFloatVector,
@@ -160,7 +171,7 @@ func (m *MilvusRetriever) createCollection(ctx context.Context, vectorDim int) e
 		},
 	}
 
-	m.logger.Info("创建集合", 
+	m.logger.Info("创建集合",
 		zap.String("collection", m.collectionName),
 		zap.Int("vector_dimension", vectorDim))
 
@@ -201,21 +212,21 @@ func parseInt(s string) int {
 // optimizeMetadata 优化元数据，控制在65536字节限制内
 func (m *MilvusRetriever) optimizeMetadata(metadata map[string]interface{}) map[string]interface{} {
 	optimized := make(map[string]interface{})
-	
+
 	// 保留重要字段，适当限制长度
 	importantFields := map[string]int{
-		"filename":       500,  // 文件名最多500字符
-		"file_type":      50,   // 文件类型最多50字符
-		"upload_time":    50,   // 上传时间
-		"chunk_index":    -1,   // 数字字段不限制
-		"chunk_total":    -1,   // 数字字段不限制
-		"parent_id":      200,  // 父文档ID
+		"filename":         500, // 文件名最多500字符
+		"file_type":        50,  // 文件类型最多50字符
+		"upload_time":      50,  // 上传时间
+		"chunk_index":      -1,  // 数字字段不限制
+		"chunk_total":      -1,  // 数字字段不限制
+		"parent_id":        200, // 父文档ID
 		"splitting_method": 100, // 分割方法
-		"content_length": -1,   // 内容长度
-		"original_size":  -1,   // 原始大小
-		"parsed_size":    -1,   // 解析后大小
+		"content_length":   -1,  // 内容长度
+		"original_size":    -1,  // 原始大小
+		"parsed_size":      -1,  // 解析后大小
 	}
-	
+
 	for field, maxLen := range importantFields {
 		if value, exists := metadata[field]; exists {
 			if maxLen > 0 {
@@ -235,12 +246,12 @@ func (m *MilvusRetriever) optimizeMetadata(metadata map[string]interface{}) map[
 			}
 		}
 	}
-	
+
 	// 移除巨大的字段
 	delete(optimized, "embedding")
-	delete(optimized, "raw_content") 
+	delete(optimized, "raw_content")
 	delete(optimized, "full_text")
-	
+
 	// 选择性保留其他字段
 	fieldCount := 0
 	for key, value := range metadata {
@@ -249,7 +260,7 @@ func (m *MilvusRetriever) optimizeMetadata(metadata map[string]interface{}) map[
 			if key == "embedding" || key == "raw_content" || key == "full_text" {
 				continue
 			}
-			
+
 			// 截断长字符串
 			if str, ok := value.(string); ok && len(str) > 1000 {
 				optimized[key] = str[:1000] + "..."
@@ -259,7 +270,7 @@ func (m *MilvusRetriever) optimizeMetadata(metadata map[string]interface{}) map[
 			fieldCount++
 		}
 	}
-	
+
 	return optimized
 }
 
@@ -320,7 +331,7 @@ func (m *MilvusRetriever) Retrieve(ctx context.Context, query string, opts ...re
 			// 对于L2距离，转换为相似度分数 (距离越小，相似度越高)
 			// 使用 1/(1+distance) 公式将距离转换为 0-1 之间的相似度
 			similarity := 1.0 / (1.0 + float64(distance))
-			
+
 			// 将相似度分数存储在metadata中
 			if metadata == nil {
 				metadata = make(map[string]interface{})
@@ -341,7 +352,7 @@ func (m *MilvusRetriever) Retrieve(ctx context.Context, query string, opts ...re
 }
 
 func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Document) error {
-	m.logger.Info("开始添加文档到Milvus", 
+	m.logger.Info("开始添加文档到Milvus",
 		zap.Int("document_count", len(docs)),
 		zap.String("collection_name", m.collectionName),
 		zap.Int("expected_dimension", m.embedding.Dimension()))
@@ -354,7 +365,7 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 
 	// 记录文档信息
 	for i, doc := range docs {
-		m.logger.Debug("准备添加文档", 
+		m.logger.Debug("准备添加文档",
 			zap.Int("doc_index", i),
 			zap.String("doc_id", doc.ID),
 			zap.Int("content_length", len(doc.Content)))
@@ -365,15 +376,15 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 	embedStart := time.Now()
 	docsWithEmbedding, err := m.embedding.EmbedDocuments(ctx, docs)
 	embedDuration := time.Since(embedStart)
-	
+
 	if err != nil {
-		m.logger.Error("生成文档嵌入向量失败", 
+		m.logger.Error("生成文档嵌入向量失败",
 			zap.Error(err),
 			zap.Duration("embed_duration", embedDuration))
 		return fmt.Errorf("embed documents: %w", err)
 	}
 
-	m.logger.Info("文档嵌入向量生成完成", 
+	m.logger.Info("文档嵌入向量生成完成",
 		zap.Int("embedded_docs", len(docsWithEmbedding)),
 		zap.Duration("embed_duration", embedDuration))
 
@@ -386,7 +397,7 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 		optimizedMetadata := m.optimizeMetadata(doc.MetaData)
 		metaBytes, err := json.Marshal(optimizedMetadata)
 		if err != nil {
-			m.logger.Warn("序列化元数据失败", 
+			m.logger.Warn("序列化元数据失败",
 				zap.String("doc_id", doc.ID),
 				zap.Error(err))
 			metadatas[i] = "{}"
@@ -397,21 +408,21 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 			if len(metadataStr) > maxLength {
 				// 如果仍然超长，进一步压缩
 				compactMeta := map[string]interface{}{
-					"filename":     optimizedMetadata["filename"],
-					"file_type":    optimizedMetadata["file_type"],
-					"chunk_index":  optimizedMetadata["chunk_index"],
-					"chunk_total":  optimizedMetadata["chunk_total"],
+					"filename":       optimizedMetadata["filename"],
+					"file_type":      optimizedMetadata["file_type"],
+					"chunk_index":    optimizedMetadata["chunk_index"],
+					"chunk_total":    optimizedMetadata["chunk_total"],
 					"content_length": optimizedMetadata["content_length"],
 				}
-				
+
 				// 截断文件名如果太长
 				if filename, ok := compactMeta["filename"].(string); ok && len(filename) > 200 {
 					compactMeta["filename"] = filename[:200] + "..."
 				}
-				
+
 				compactBytes, _ := json.Marshal(compactMeta)
 				metadataStr = string(compactBytes)
-				
+
 				// 最后的保险措施：直接截断
 				if len(metadataStr) > maxLength {
 					// 按字节截断，确保JSON格式正确
@@ -421,8 +432,8 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 						metadataStr = `{"filename":"truncated","chunk_index":0}`
 					}
 				}
-				
-				m.logger.Warn("元数据过长，已压缩", 
+
+				m.logger.Warn("元数据过长，已压缩",
 					zap.String("doc_id", doc.ID),
 					zap.Int("original_bytes", len(string(metaBytes))),
 					zap.Int("final_bytes", len(metadataStr)))
@@ -434,12 +445,12 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 		if embeddingData, exists := doc.MetaData["embedding"]; exists {
 			if embVec, ok := embeddingData.([]float32); ok {
 				embeddings[i] = embVec
-				m.logger.Debug("获取嵌入向量", 
+				m.logger.Debug("获取嵌入向量",
 					zap.String("doc_id", doc.ID),
 					zap.Int("embedding_dimension", len(embVec)),
 					zap.Float32("first_value", embVec[0]))
 			} else {
-				m.logger.Error("嵌入向量类型转换失败", 
+				m.logger.Error("嵌入向量类型转换失败",
 					zap.String("doc_id", doc.ID),
 					zap.String("actual_type", fmt.Sprintf("%T", embeddingData)))
 				return fmt.Errorf("invalid embedding type for document %s", doc.ID)
@@ -451,7 +462,7 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 	}
 
 	// 验证数据完整性
-	m.logger.Debug("验证插入数据", 
+	m.logger.Debug("验证插入数据",
 		zap.Int("ids_count", len(ids)),
 		zap.Int("contents_count", len(contents)),
 		zap.Int("metadatas_count", len(metadatas)),
@@ -460,7 +471,7 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 	// 插入到Milvus
 	m.logger.Debug("开始插入数据到Milvus")
 	insertStart := time.Now()
-	
+
 	columns := []entity.Column{
 		entity.NewColumnVarChar("doc_id", ids),
 		entity.NewColumnVarChar("content", contents),
@@ -468,24 +479,128 @@ func (m *MilvusRetriever) AddDocuments(ctx context.Context, docs []*schema.Docum
 		entity.NewColumnFloatVector("embedding", m.embedding.Dimension(), embeddings),
 	}
 
-	_, err = m.client.Insert(ctx, m.collectionName, "", columns...)
+	// 为插入操作设置独立的超时时间
+	insertCtx, insertCancel := context.WithTimeout(ctx, time.Duration(m.insertTimeout)*time.Second)
+	defer insertCancel()
+
+	_, err = m.client.Insert(insertCtx, m.collectionName, "", columns...)
 	insertDuration := time.Since(insertStart)
-	
+
 	if err != nil {
-		m.logger.Error("插入Milvus失败", 
+		m.logger.Error("插入Milvus失败",
 			zap.Error(err),
 			zap.Duration("insert_duration", insertDuration))
 		return err
 	}
 
-	m.logger.Info("文档成功插入Milvus", 
+	m.logger.Info("文档成功插入Milvus",
 		zap.Int("inserted_count", len(docs)),
 		zap.Duration("insert_duration", insertDuration))
 
 	return nil
 }
 
+// GetDocumentsList 获取已索引的文档列表
+func (m *MilvusRetriever) GetDocumentsList(ctx context.Context) ([]map[string]interface{}, error) {
+	// 查询所有文档的元数据，按 parent_id 去重获取唯一文档
+	searchParam, err := entity.NewIndexIvfFlatSearchParam(100)
+	if err != nil {
+		return nil, fmt.Errorf("create search param: %w", err)
+	}
 
+	// 使用空向量查询来获取文档（这是一个workaround）
+	// 更好的方法是使用 query 而不是 search，但这里先用这个简单的方案
+	// 我们使用一个零向量进行搜索，然后获取大量结果
+	zeroVector := make([]float32, m.embedding.Dimension())
+	vectors := []entity.Vector{entity.FloatVector(zeroVector)}
+
+	// 搜索大量结果来获取文档列表
+	searchResult, err := m.client.Search(
+		ctx,
+		m.collectionName,
+		nil,
+		"",
+		[]string{"doc_id", "content", "metadata"},
+		vectors,
+		"embedding",
+		entity.L2,
+		1000, // 获取更多结果
+		searchParam,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("milvus search for documents: %w", err)
+	}
+
+	if len(searchResult) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	// 用于去重的 parent_id 映射
+	documentMap := make(map[string]map[string]interface{})
+
+	sr := searchResult[0]
+	for i := 0; i < sr.ResultCount; i++ {
+		metadataStr, _ := sr.Fields.GetColumn("metadata").GetAsString(i)
+
+		var metadata map[string]interface{}
+		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
+			continue // 跳过解析失败的元数据
+		}
+
+		// 获取 parent_id，用于去重
+		parentID, ok := metadata["parent_id"].(string)
+		if !ok {
+			continue
+		}
+
+		// 如果这个文档还没记录，或者当前记录的分块索引更小（取第一个分块的信息）
+		if existingDoc, exists := documentMap[parentID]; !exists {
+			documentMap[parentID] = metadata
+		} else {
+			// 比较 chunk_index，取索引最小的（通常是第一个分块，包含最完整的元数据）
+			currentIndex, _ := metadata["chunk_index"].(float64)
+			existingIndex, _ := existingDoc["chunk_index"].(float64)
+			if currentIndex < existingIndex {
+				documentMap[parentID] = metadata
+			}
+		}
+	}
+
+	// 转换为列表格式
+	documents := make([]map[string]interface{}, 0, len(documentMap))
+	for parentID, doc := range documentMap {
+		// 处理文件大小，确保类型正确
+		var fileSize int64 = 0
+		if size, ok := doc["original_size"]; ok {
+			switch s := size.(type) {
+			case float64:
+				fileSize = int64(s)
+			case int64:
+				fileSize = s
+			case int:
+				fileSize = int64(s)
+			}
+		}
+
+		documentInfo := map[string]interface{}{
+			"id":               parentID,
+			"filename":         doc["filename"],
+			"file_type":        doc["file_type"],
+			"upload_time":      doc["upload_time"],
+			"size":             fileSize, // 前端期望的字段名
+			"chunk_total":      doc["chunk_total"],
+			"splitting_method": doc["splitting_method"],
+		}
+		documents = append(documents, documentInfo)
+	}
+
+	m.logger.Info("获取文档列表完成",
+		zap.Int("total_chunks", sr.ResultCount),
+		zap.Int("unique_documents", len(documents)))
+
+	return documents, nil
+}
 
 func (m *MilvusRetriever) Close() error {
 	return m.client.Close()

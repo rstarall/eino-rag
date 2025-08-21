@@ -1,5 +1,5 @@
 # 开发环境Dockerfile，支持热重载和调试
-FROM golang:1.23-alpine AS base
+FROM golang:1.24-alpine AS base
 
 # 配置Alpine镜像源为中科大镜像
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories

@@ -1,0 +1,231 @@
+basePath: /
+definitions:
+  handlers.DocResult:
+    properties:
+      content:
+        description: 文档内容
+        example: 这是文档的内容片段...
+        type: string
+      id:
+        description: 文档ID
+        example: doc_12345
+        type: string
+      metadata:
+        additionalProperties: true
+        description: 文档元数据
+        type: object
+      score:
+        description: 相似度分数
+        example: 0.85
+        type: number
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      message:
+        description: 错误信息
+        example: 操作失败的原因
+        type: string
+      success:
+        description: 操作是否成功
+        example: false
+        type: boolean
+    type: object
+  handlers.HealthResponse:
+    properties:
+      service:
+        description: 服务名称
+        example: eino-rag
+        type: string
+      status:
+        description: 服务状态
+        example: healthy
+        type: string
+      timestamp:
+        description: 时间戳
+        example: 1640995200
+        type: integer
+    type: object
+  handlers.ProcessingStatsResponse:
+    properties:
+      stats:
+        description: 统计信息
+      success:
+        description: 操作是否成功
+        example: true
+        type: boolean
+    type: object
+  handlers.SearchRequest:
+    properties:
+      query:
+        description: 搜索查询内容
+        example: 人工智能的发展历史
+        type: string
+      return_context:
+        description: 是否返回上下文信息
+        example: true
+        type: boolean
+    required:
+    - query
+    type: object
+  handlers.SearchResponse:
+    properties:
+      context:
+        description: 生成的上下文信息
+        example: 根据检索到的文档...
+        type: string
+      documents:
+        description: 检索到的文档列表
+        items:
+          $ref: '#/definitions/handlers.DocResult'
+        type: array
+      query:
+        description: 原始查询内容
+        example: 人工智能的发展历史
+        type: string
+      success:
+        description: 操作是否成功
+        example: true
+        type: boolean
+      timestamp:
+        description: 响应时间戳
+        example: 1640995200
+        type: integer
+    type: object
+  handlers.UploadResponse:
+    properties:
+      chunk_count:
+        description: 文档分块数量
+        example: 5
+        type: integer
+      message:
+        description: 响应消息
+        example: Document indexed successfully
+        type: string
+      success:
+        description: 操作是否成功
+        example: true
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: http://www.github.com/rstarall
+    name: API Support
+    url: http://www.github.com/rstarall
+  description: |-
+    基于Eino框架的RAG(检索增强生成)系统API
+    支持文档上传、向量化索引、语义搜索等功能
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://www.github.com/rstarall
+  title: Eino RAG API
+  version: "1.0"
+paths:
+  /api/health:
+    get:
+      description: 检查服务运行状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 服务正常
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: 健康检查
+      tags:
+      - 系统
+  /api/search:
+    post:
+      consumes:
+      - application/json
+      description: 根据查询内容在已索引的文档中进行语义搜索
+      parameters:
+      - description: 搜索请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 搜索成功
+          schema:
+            $ref: '#/definitions/handlers.SearchResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: 搜索服务错误
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: 搜索文档
+      tags:
+      - 搜索
+  /api/stats:
+    get:
+      description: 获取文档处理和索引的统计信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 获取统计信息成功
+          schema:
+            $ref: '#/definitions/handlers.ProcessingStatsResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: 获取处理统计
+      tags:
+      - 系统
+  /api/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传PDF、Word、TXT等格式的文档进行向量化处理和索引
+      parameters:
+      - description: 文档文件 (支持 .pdf, .docx, .txt 格式)
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 文档元数据 (JSON格式)
+        in: formData
+        name: metadata
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上传成功
+          schema:
+            $ref: '#/definitions/handlers.UploadResponse'
+        "400":
+          description: 请求错误 (文件格式不支持、文件过大等)
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "413":
+          description: 文件过大
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: 上传文档
+      tags:
+      - 文档管理
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    description: Bearer token authentication
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

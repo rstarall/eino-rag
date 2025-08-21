@@ -59,7 +59,7 @@ func (s *RAGService) buildSearchChain(ctx context.Context) error {
 }
 
 func (s *RAGService) IndexDocument(ctx context.Context, content string, metadata map[string]interface{}) error {
-	s.logger.Info("开始索引文档", 
+	s.logger.Info("开始索引文档",
 		zap.Int("content_length", len(content)),
 		zap.Any("metadata", metadata))
 
@@ -68,21 +68,21 @@ func (s *RAGService) IndexDocument(ctx context.Context, content string, metadata
 	processStart := time.Now()
 	chunks, err := s.processor.ProcessText(content, metadata)
 	processDuration := time.Since(processStart)
-	
+
 	if err != nil {
-		s.logger.Error("文档处理失败", 
+		s.logger.Error("文档处理失败",
 			zap.Error(err),
 			zap.Duration("process_duration", processDuration))
 		return fmt.Errorf("failed to process document: %w", err)
 	}
 
-	s.logger.Info("文档处理完成", 
+	s.logger.Info("文档处理完成",
 		zap.Int("chunk_count", len(chunks)),
 		zap.Duration("process_duration", processDuration))
 
 	// 记录分块信息
 	for i, chunk := range chunks {
-		s.logger.Debug("分块信息", 
+		s.logger.Debug("分块信息",
 			zap.Int("chunk_index", i),
 			zap.String("chunk_id", chunk.ID),
 			zap.Int("chunk_length", len(chunk.Content)),
@@ -94,15 +94,15 @@ func (s *RAGService) IndexDocument(ctx context.Context, content string, metadata
 	addStart := time.Now()
 	err = s.retriever.AddDocuments(ctx, chunks)
 	addDuration := time.Since(addStart)
-	
+
 	if err != nil {
-		s.logger.Error("添加文档到向量数据库失败", 
+		s.logger.Error("添加文档到向量数据库失败",
 			zap.Error(err),
 			zap.Duration("add_duration", addDuration))
 		return err
 	}
 
-	s.logger.Info("文档索引完成", 
+	s.logger.Info("文档索引完成",
 		zap.Int("chunk_count", len(chunks)),
 		zap.Duration("add_duration", addDuration))
 
@@ -161,4 +161,18 @@ func (s *RAGService) ClearProcessingCache() {
 // SetSemanticSplitting 动态启用/禁用语义分割
 func (s *RAGService) SetSemanticSplitting(enable bool) error {
 	return s.processor.SetSemanticSplitting(enable)
+}
+
+// GetDocuments 获取已索引的文档列表
+func (s *RAGService) GetDocuments(ctx context.Context) ([]map[string]interface{}, error) {
+	s.logger.Debug("获取文档列表")
+
+	documents, err := s.retriever.GetDocumentsList(ctx)
+	if err != nil {
+		s.logger.Error("获取文档列表失败", zap.Error(err))
+		return nil, fmt.Errorf("failed to get documents list: %w", err)
+	}
+
+	s.logger.Info("成功获取文档列表", zap.Int("document_count", len(documents)))
+	return documents, nil
 }
