@@ -1,0 +1,123 @@
+{{define "admin/dashboard.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<div class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="admin-sidebar">
+        <div style="padding: 1.5rem;">
+            <h2 style="color: var(--primary-color);">管理后台</h2>
+        </div>
+        
+        <nav class="admin-nav">
+            <a href="/admin/" class="admin-nav-item active">仪表板</a>
+            <a href="/admin/knowledge-bases" class="admin-nav-item">知识库管理</a>
+            <a href="/admin/documents" class="admin-nav-item">文档管理</a>
+            <a href="/admin/users" class="admin-nav-item">用户管理</a>
+            <a href="/admin/settings" class="admin-nav-item">系统设置</a>
+            <div style="border-top: 1px solid var(--border-color); margin: 1rem 0;"></div>
+            <a href="/" class="admin-nav-item">返回前台</a>
+            <a href="#" class="admin-nav-item logout-btn">退出登录</a>
+        </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="admin-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1 style="margin: 0;">系统概览</h1>
+            <button onclick="loadStats()" class="btn btn-secondary">
+                🔄 刷新数据
+            </button>
+        </div>
+        
+        <!-- 统计卡片 -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value">-</div>
+                <div class="stat-label">用户总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">-</div>
+                <div class="stat-label">知识库总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">-</div>
+                <div class="stat-label">文档总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">-</div>
+                <div class="stat-label">对话总数</div>
+            </div>
+        </div>
+        
+        <!-- 最近活动 -->
+        <div class="card">
+            <h2>今日数据</h2>
+            <div class="stats-grid">
+                <div style="padding: 1rem;">
+                    <div style="font-size: 1.5rem; font-weight: 600; color: var(--success-color);" id="todayUsers">0</div>
+                    <div style="color: var(--text-secondary);">新增用户</div>
+                </div>
+                <div style="padding: 1rem;">
+                    <div style="font-size: 1.5rem; font-weight: 600; color: var(--primary-color);" id="todayDocs">0</div>
+                    <div style="color: var(--text-secondary);">新增文档</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 快速操作 -->
+        <div class="card">
+            <h2>快速操作</h2>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <a href="/admin/knowledge-bases" class="btn btn-primary">创建知识库</a>
+                <a href="/admin/documents" class="btn btn-secondary">上传文档</a>
+                <a href="/admin/users" class="btn btn-outline">管理用户</a>
+                <a href="/admin/settings" class="btn btn-outline">系统设置</a>
+            </div>
+        </div>
+    </main>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+<script>
+// 加载统计数据
+async function loadStats() {
+    try {
+        const result = await api.system.getStats();
+        if (result.success) {
+            const stats = result.stats;
+            
+            // 更新统计卡片
+            const cards = document.querySelectorAll('.stat-card');
+            cards[0].querySelector('.stat-value').textContent = stats.user_count || 0;
+            cards[1].querySelector('.stat-value').textContent = stats.knowledge_base_count || 0;
+            cards[2].querySelector('.stat-value').textContent = stats.document_count || 0;
+            cards[3].querySelector('.stat-value').textContent = stats.chat_count || 0;
+            
+            // 更新今日数据
+            document.getElementById('todayUsers').textContent = stats.today_new_users || 0;
+            document.getElementById('todayDocs').textContent = stats.today_new_documents || 0;
+        }
+    } catch (error) {
+        console.error('加载统计数据失败:', error);
+    }
+}
+
+// 初始化
+loadStats();
+
+// 移除自动刷新，改为手动刷新按钮
+// setInterval(loadStats, 30000); // 已禁用自动刷新
+</script>
+</body>
+</html>
+{{end}}

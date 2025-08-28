@@ -1,0 +1,1032 @@
+{{define "chat.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- Markdown渲染库 -->
+    <script src="https://unpkg.com/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+    <!-- 代码语法高亮 -->
+    <link rel="stylesheet" href="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/styles/github.min.css">
+    <script src="https://unpkg.com/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+    <!-- 数学公式支持 -->
+    <link rel="stylesheet" href="https://unpkg.com/katex@0.16.9/dist/katex.min.css">
+    <script src="https://unpkg.com/katex@0.16.9/dist/katex.min.js"></script>
+    
+    <style>
+        /* Markdown渲染样式优化 */
+        .message-text {
+            line-height: 1.6;
+        }
+        
+        .message-text h1, .message-text h2, .message-text h3, 
+        .message-text h4, .message-text h5, .message-text h6 {
+            margin: 1em 0 0.5em 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        
+        .message-text h1 { font-size: 1.5em; color: var(--primary-color, #007bff); }
+        .message-text h2 { font-size: 1.3em; color: var(--primary-color, #007bff); }
+        .message-text h3 { font-size: 1.2em; }
+        .message-text h4 { font-size: 1.1em; }
+        
+        .message-text p {
+            margin: 0.8em 0;
+        }
+        
+        .message-text ul, .message-text ol {
+            margin: 0.8em 0;
+            padding-left: 2em;
+        }
+        
+        .message-text li {
+            margin: 0.3em 0;
+        }
+        
+        .message-text blockquote {
+            margin: 1em 0;
+            padding: 0.5em 1em;
+            background: var(--background-secondary, #f8f9fa);
+            border-left: 4px solid var(--primary-color, #007bff);
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .message-text code {
+            background: var(--background-secondary, #f8f9fa);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+        }
+        
+        .message-text pre {
+            background: var(--background-secondary, #f8f9fa);
+            padding: 1em;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 1em 0;
+            border: 1px solid var(--border-color, #e1e4e8);
+        }
+        
+        .message-text pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+        }
+        
+        .message-text table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+            border: 1px solid var(--border-color, #e1e4e8);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .message-text th, .message-text td {
+            padding: 0.75em 1em;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color, #e1e4e8);
+        }
+        
+        .message-text th {
+            background: var(--background-secondary, #f8f9fa);
+            font-weight: 600;
+        }
+        
+        .message-text tr:hover {
+            background: var(--background-secondary, #f8f9fa);
+        }
+        
+        .message-text a {
+            color: var(--primary-color, #007bff);
+            text-decoration: none;
+        }
+        
+        .message-text a:hover {
+            text-decoration: underline;
+        }
+        
+        /* 数学公式样式 */
+        .message-text .katex {
+            font-size: 1em;
+        }
+        
+        .message-text .math-block {
+            margin: 1em 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        
+        /* 聊天输入区域优化 */
+        .chat-input-container {
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border-color, #e1e4e8) !important;
+            padding: 1.5rem !important;
+            z-index: 100;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        
+        .chat-input-form {
+            margin-bottom: 0.75rem;
+        }
+        
+        .input-wrapper {
+            position: relative;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 2px solid var(--border-color, #e1e4e8);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            padding: 16px 60px 16px 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .input-wrapper:focus-within {
+            border-color: var(--primary-color, #007bff);
+            box-shadow: 0 4px 20px rgba(0, 123, 255, 0.15);
+        }
+        
+        .chat-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 1rem;
+            line-height: 1.4;
+            resize: none;
+            min-height: 24px;
+            max-height: 120px;
+            font-family: inherit;
+            color: var(--text-primary, #333);
+        }
+        
+        .chat-input::placeholder {
+            color: var(--text-secondary, #999);
+        }
+        
+        .send-button {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 50%;
+            background: var(--primary-color, #007bff);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        .send-button:hover:not(:disabled) {
+            background: var(--primary-dark, #0056b3);
+            transform: translateY(-50%) scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        }
+        
+        .send-button:disabled {
+            background: var(--text-secondary, #999);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: translateY(-50%);
+            opacity: 0.6;
+        }
+        
+        .send-button:active:not(:disabled) {
+            transform: translateY(-50%) scale(0.95);
+        }
+        
+        .input-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 4px;
+        }
+        
+        .option-item {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-secondary, #666);
+            user-select: none;
+        }
+        
+        .option-item input[type="checkbox"] {
+            display: none;
+        }
+        
+        .checkmark {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border-color, #ddd);
+            border-radius: 4px;
+            margin-right: 8px;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .option-item input[type="checkbox"]:checked + .checkmark {
+            background: var(--primary-color, #007bff);
+            border-color: var(--primary-color, #007bff);
+        }
+        
+        .option-item input[type="checkbox"]:checked + .checkmark::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 2px;
+            width: 4px;
+            height: 8px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        
+        .option-item:hover .checkmark {
+            border-color: var(--primary-color, #007bff);
+        }
+        
+        .option-text {
+            transition: color 0.2s ease;
+        }
+        
+        .option-item:hover .option-text {
+            color: var(--primary-color, #007bff);
+        }
+        
+        .input-stats {
+            font-size: 0.8rem;
+            color: var(--text-secondary, #999);
+            font-family: monospace;
+        }
+        
+        /* 输入框加载状态 */
+        .input-wrapper.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        
+        .input-wrapper.loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: 60px;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color, #ddd);
+            border-top-color: var(--primary-color, #007bff);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% {
+                transform: translateY(-50%) rotate(0deg);
+            }
+            100% {
+                transform: translateY(-50%) rotate(360deg);
+            }
+        }
+        
+        /* 聊天消息区域调整 */
+        .chat-main {
+            position: relative !important;
+        }
+        
+        .chat-messages {
+            padding-bottom: 140px; /* 为固定输入框留出空间 */
+        }
+        
+        /* 响应式优化 */
+        
+        /* 中等屏幕 - 平板 */
+        @media (max-width: 1024px) {
+            .input-wrapper {
+                padding: 12px 55px 12px 18px;
+            }
+        }
+        
+        /* 小屏幕 - 手机 */
+        @media (max-width: 768px) {
+            .message-text table {
+                font-size: 0.9em;
+            }
+            
+            .message-text th, .message-text td {
+                padding: 0.5em 0.75em;
+            }
+            
+            .chat-input-container {
+                padding: 1rem !important;
+            }
+            
+            .chat-messages {
+                padding-bottom: 120px;
+            }
+            
+            .input-wrapper {
+                padding: 10px 50px 10px 16px;
+            }
+            
+            .send-button {
+                width: 32px;
+                height: 32px;
+                right: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<nav class="navbar">
+    <div class="container">
+        <div class="navbar-content">
+            <a href="/" class="navbar-brand">Eino RAG</a>
+            <div class="navbar-menu">
+                <select id="kbSelect" class="form-control" style="width: 200px;">
+                    <option value="">选择知识库（可选）</option>
+                </select>
+                <span class="user-name"></span>
+                <a href="/admin" class="btn btn-outline">管理后台</a>
+                <button class="btn btn-secondary logout-btn">退出</button>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<div class="chat-container">
+    <div class="chat-sidebar">
+        <button class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="startNewChat()">
+            新建对话
+        </button>
+        
+        <h3 style="margin-bottom: 1rem;">历史对话</h3>
+        <div id="conversationList"></div>
+    </div>
+    
+    <div class="chat-main">
+        <div class="chat-header">
+            <h2 id="chatTitle">智能对话助手</h2>
+        </div>
+        
+        <div class="chat-messages" id="messageContainer">
+            <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                <p>欢迎使用 Eino RAG 智能对话系统</p>
+                <p>您可以直接开始对话，或选择知识库获得更精准的回答</p>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <form class="chat-input-form" id="chatForm">
+                <div class="input-wrapper">
+                    <textarea class="chat-input" id="messageInput" 
+                              placeholder="输入您的问题..." 
+                              rows="1"
+                              disabled></textarea>
+                    <button type="submit" class="send-button" id="sendBtn" disabled>
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="currentColor" d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+            <div class="input-options">
+                <label class="option-item">
+                    <input type="checkbox" id="showContext" checked>
+                    <span class="checkmark"></span>
+                    <span class="option-text">显示检索上下文</span>
+                </label>
+                <div class="input-stats">
+                    <span id="charCount">0</span> / 2000
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+<script>
+let currentConversationId = null;
+let currentKbId = null;
+
+// 初始化Markdown渲染器
+let markdownRenderer;
+
+// 等待所有库加载完成
+function initializeMarkdown() {
+    try {
+        // 检查必要的库是否已加载
+        if (typeof window.markdownit === 'undefined') {
+            console.error('markdown-it 未加载');
+            return false;
+        }
+        
+        // 配置markdown-it
+        markdownRenderer = window.markdownit({
+            html: false,        // 禁用HTML标签以确保安全
+            xhtmlOut: false,    // 使用HTML5标签
+            breaks: true,       // 将换行符转换为<br>
+            linkify: true,      // 自动识别链接
+            typographer: true,  // 启用智能引号和其他排版替换
+            highlight: function (str, lang) {
+                // 检查hljs是否可用
+                if (typeof window.hljs !== 'undefined' && lang && window.hljs.getLanguage(lang)) {
+                    try {
+                        return '<pre class="hljs"><code>' +
+                               window.hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+                               '</code></pre>';
+                    } catch (e) {
+                        console.warn('代码高亮失败:', e);
+                    }
+                }
+                return '<pre class="hljs"><code>' + markdownRenderer.utils.escapeHtml(str) + '</code></pre>';
+            }
+        });
+        
+        // KaTeX数学公式支持将通过后处理实现
+        
+        console.log('Markdown渲染器初始化成功');
+        return true;
+    } catch (error) {
+        console.error('Markdown渲染器初始化失败:', error);
+        return false;
+    }
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 延迟一点时间确保所有CDN资源都加载完成
+    setTimeout(() => {
+        // 初始化highlight.js（如果可用）
+        if (typeof window.hljs !== 'undefined') {
+            try {
+                window.hljs.highlightAll();
+                console.log('highlight.js初始化成功');
+            } catch (e) {
+                console.warn('highlight.js初始化失败:', e);
+            }
+        }
+        
+        // 初始化Markdown渲染器
+        initializeMarkdown();
+        
+        // 页面功能初始化
+        loadKnowledgeBases();
+        loadConversations();
+    }, 100);
+});
+
+// Markdown渲染函数
+function renderMarkdown(text) {
+    if (!markdownRenderer) {
+        return text; // 如果渲染器未初始化，返回原文本
+    }
+    try {
+        return markdownRenderer.render(text);
+    } catch (error) {
+        console.error('Markdown渲染错误:', error);
+        return text; // 渲染失败时返回原文本
+    }
+}
+
+// 处理数学公式
+function processMathFormulas(element) {
+    if (typeof window.katex !== 'undefined') {
+        try {
+            // 处理行内数学公式 $...$
+            element.innerHTML = element.innerHTML.replace(/\$([^$]+)\$/g, function(match, formula) {
+                try {
+                    return window.katex.renderToString(formula, {throwOnError: false});
+                } catch (e) {
+                    return match; // 如果渲染失败，保持原文
+                }
+            });
+            
+            // 处理块级数学公式 $$...$$
+            element.innerHTML = element.innerHTML.replace(/\$\$([^$]+)\$\$/g, function(match, formula) {
+                try {
+                    return '<div class="math-block">' + window.katex.renderToString(formula, {
+                        throwOnError: false,
+                        displayMode: true
+                    }) + '</div>';
+                } catch (e) {
+                    return match; // 如果渲染失败，保持原文
+                }
+            });
+        } catch (e) {
+            console.warn('数学公式处理失败:', e);
+        }
+    }
+}
+
+// 安全的HTML插入函数
+function setMarkdownContent(element, text) {
+    const renderedHTML = renderMarkdown(text);
+    element.innerHTML = renderedHTML;
+    
+    // 处理数学公式
+    processMathFormulas(element);
+    
+    // 重新应用代码高亮（如果hljs可用）
+    if (typeof window.hljs !== 'undefined') {
+        try {
+            element.querySelectorAll('pre code').forEach((block) => {
+                window.hljs.highlightElement(block);
+            });
+        } catch (e) {
+            console.warn('代码高亮应用失败:', e);
+        }
+    }
+}
+
+// 加载知识库列表
+async function loadKnowledgeBases() {
+    try {
+        const result = await api.knowledgeBase.list(1, 100);
+        if (result.success) {
+            const select = document.getElementById('kbSelect');
+            select.innerHTML = '<option value="">选择知识库</option>';
+            
+            result.knowledge_bases.forEach(kb => {
+                const option = document.createElement('option');
+                option.value = kb.id;
+                option.textContent = kb.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('加载知识库失败:', error);
+    }
+}
+
+// 加载对话历史
+async function loadConversations() {
+    try {
+        const result = await api.chat.listConversations();
+        if (result.success) {
+            const list = document.getElementById('conversationList');
+            list.innerHTML = '';
+            
+            if (result.conversations.length === 0) {
+                list.innerHTML = '<div style="text-align: center; color: var(--text-secondary);">暂无对话记录</div>';
+                return;
+            }
+            
+            result.conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'conversation-item';
+                if (conv.conversation_id === currentConversationId) {
+                    item.classList.add('active');
+                }
+                item.innerHTML = `
+                    <div>${conv.title || '未命名对话'}</div>
+                    <small>${new Date(conv.created_at).toLocaleString()}</small>
+                `;
+                item.onclick = function() { loadConversation(conv.conversation_id, this); };
+                list.appendChild(item);
+            });
+        }
+    } catch (error) {
+        console.error('加载对话历史失败:', error);
+    }
+}
+
+// 加载对话内容
+async function loadConversation(id, element) {
+    try {
+        const result = await api.chat.getConversation(id);
+        if (result.success) {
+            currentConversationId = id;
+            displayMessages(result.messages || []);
+            
+            // 更新激活状态
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (element) {
+                element.classList.add('active');
+            }
+        }
+    } catch (error) {
+        console.error('加载对话内容失败:', error);
+        utils.showMessage('加载对话失败', 'error');
+    }
+}
+
+// 开始新对话
+function startNewChat() {
+    currentConversationId = null;
+    document.getElementById('messageContainer').innerHTML = `
+        <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+            <p>开始新的对话</p>
+        </div>
+    `;
+    document.getElementById('chatTitle').textContent = '新对话';
+}
+
+// 显示消息
+function displayMessages(messages) {
+    const container = document.getElementById('messageContainer');
+    container.innerHTML = '';
+    
+    messages.forEach(msg => {
+        addMessage(msg.content, msg.role);
+    });
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+// 添加消息到界面
+function addMessage(content, role) {
+    const container = document.getElementById('messageContainer');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${role}`;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    if (role === 'assistant') {
+        // AI消息使用Markdown渲染
+        const textDiv = document.createElement('div');
+        textDiv.className = 'message-text';
+        setMarkdownContent(textDiv, content);
+        
+        const contextDiv = document.createElement('div');
+        contextDiv.className = 'message-context';
+        
+        contentDiv.appendChild(textDiv);
+        contentDiv.appendChild(contextDiv);
+    } else {
+        // 用户消息保持纯文本
+        contentDiv.textContent = content;
+    }
+    
+    messageDiv.appendChild(contentDiv);
+    container.appendChild(messageDiv);
+}
+
+// 发送消息
+document.getElementById('chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    // 显示用户消息
+    addMessage(message, 'user');
+    input.value = '';
+    
+    // 重置输入框高度和字符计数
+    input.style.height = 'auto';
+    document.getElementById('charCount').textContent = '0';
+    document.getElementById('charCount').style.color = 'var(--text-secondary, #999)';
+    
+    // 显示加载状态
+    const inputWrapper = document.querySelector('.input-wrapper');
+    inputWrapper.classList.add('loading');
+    
+    // 创建助手消息容器
+    const container = document.getElementById('messageContainer');
+    const assistantDiv = document.createElement('div');
+    assistantDiv.className = 'chat-message assistant';
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    // 创建文本内容区域和文档上下文区域
+    const textDiv = document.createElement('div');
+    textDiv.className = 'message-text';
+    textDiv.textContent = '正在思考...';
+    
+    const contextDiv = document.createElement('div');
+    contextDiv.className = 'message-context';
+    
+    contentDiv.appendChild(textDiv);
+    contentDiv.appendChild(contextDiv);
+    assistantDiv.appendChild(contentDiv);
+    container.appendChild(assistantDiv);
+    container.scrollTop = container.scrollHeight;
+    
+    let isFirstChunk = true;
+    let accumulatedContent = '';
+
+
+    try {
+        await api.chat.sendStream(
+            message, 
+            currentConversationId, 
+            currentKbId, 
+            !!currentKbId, // 只有选择了知识库才启用RAG
+            // onMessage: 处理流式内容
+            (content) => {
+                if (isFirstChunk) {
+                    textDiv.textContent = ''; // 清空"正在思考..."
+                    isFirstChunk = false;
+                }
+                accumulatedContent += content;
+                
+                // 实时渲染Markdown内容
+                setMarkdownContent(textDiv, accumulatedContent);
+                container.scrollTop = container.scrollHeight;
+            },
+            // onError: 处理错误
+            (error) => {
+                console.error('流式聊天失败:', error);
+                const errorMsg = '抱歉，发生了错误: ' + (error.message || '网络错误');
+                setMarkdownContent(textDiv, errorMsg);
+                textDiv.style.color = 'var(--error-color)';
+                utils.showMessage('发送失败: ' + (error.message || '网络错误'), 'error');
+                
+                // 移除加载状态
+                inputWrapper.classList.remove('loading');
+            },
+            // onComplete: 处理完成
+            (result) => {
+                // 更新对话ID
+                const convId = result.conversation_id;
+                if (!currentConversationId && convId) {
+                    currentConversationId = convId;
+                    // 更新标题
+                    document.getElementById('chatTitle').textContent = '对话 ' + convId.substring(0, 8);
+                    // 重新加载对话列表
+                    loadConversations();
+                }
+                
+                // 如果内容为空，显示默认消息
+                if (accumulatedContent.trim() === '' || textDiv.textContent === '正在思考...') {
+                    setMarkdownContent(textDiv, '抱歉，没有收到回复');
+                }
+                
+                // 移除加载状态
+                inputWrapper.classList.remove('loading');
+            },
+            // onContext: 处理文档上下文
+            (documents) => {
+                const showContext = document.getElementById('showContext').checked;
+                if (showContext && documents && documents.length > 0) {
+                    addContextToMessage(assistantDiv, documents);
+                }
+            }
+        );
+    } catch (error) {
+        console.error('发送消息失败:', error);
+        setMarkdownContent(textDiv, '抱歉，网络连接出现问题');
+        textDiv.style.color = 'var(--error-color)';
+        utils.showMessage('发送失败: ' + (error.message || '网络错误'), 'error');
+        
+        // 移除加载状态
+        inputWrapper.classList.remove('loading');
+    }
+});
+
+// 添加文档上下文到消息（简洁版本，参考旧版设计）
+function addContextToMessage(messageElement, documents) {
+    if (!documents || documents.length === 0) return;
+    
+    // 查找专门的context区域
+    const messageContextArea = messageElement.querySelector('.message-context');
+    if (!messageContextArea) {
+        console.error('找不到.message-context区域！');
+        return;
+    }
+    
+    const contextDiv = document.createElement('div');
+    contextDiv.className = 'context-section';
+    
+    // 创建可折叠的头部
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'context-header';
+    headerDiv.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border-color, #e0e0e0);
+        margin-bottom: 0.5rem;
+    `;
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.style.cssText = `
+        display: flex;
+        align-items: center;
+        font-weight: 600;
+        color: var(--primary-color, #007bff);
+        font-size: 0.9em;
+    `;
+    
+    const iconSpan = document.createElement('span');
+    iconSpan.style.cssText = `margin-right: 0.5rem;`;
+    iconSpan.textContent = '📚';
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = `检索到 ${documents.length} 个相关文档片段`;
+    
+    const toggleIcon = document.createElement('span');
+    toggleIcon.style.cssText = `
+        font-size: 0.8em;
+        color: var(--text-secondary, #666);
+        transition: transform 0.2s ease;
+    `;
+    toggleIcon.textContent = '▼';
+    
+    titleDiv.appendChild(iconSpan);
+    titleDiv.appendChild(titleSpan);
+    headerDiv.appendChild(titleDiv);
+    headerDiv.appendChild(toggleIcon);
+    
+    // 创建可折叠的内容区域
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'context-content';
+    contentDiv.style.cssText = `
+        max-height: 200px;
+        overflow-y: auto;
+        transition: all 0.3s ease;
+    `;
+    
+    documents.forEach((doc, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'context-item';
+        itemDiv.style.cssText = `
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: var(--background-secondary, #f8f9fa);
+            border-radius: 0.25rem;
+            border-left: 3px solid var(--primary-color, #007bff);
+            font-size: 0.85em;
+        `;
+        
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'context-score';
+        scoreSpan.style.cssText = `
+            display: inline-block;
+            background: var(--success-color, #28a745);
+            color: white;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.75rem;
+            font-size: 0.8em;
+            margin-right: 0.5rem;
+            font-weight: 500;
+        `;
+        scoreSpan.textContent = `${Math.round((doc.score || 0) * 100)}%`;
+        
+        // 文件名（如果有）
+        const fileName = doc.metadata?.file_name || doc.metadata?.filename;
+        if (fileName) {
+            const fileSpan = document.createElement('span');
+            fileSpan.style.cssText = `
+                font-weight: 600;
+                color: var(--text-primary, #333);
+                margin-right: 0.5rem;
+            `;
+            fileSpan.textContent = `[${fileName}] `;
+            itemDiv.appendChild(fileSpan);
+        }
+        
+        const contentSpan = document.createElement('span');
+        contentSpan.style.cssText = `
+            color: var(--text-secondary, #666);
+            line-height: 1.4;
+        `;
+        // 限制显示长度
+        const content = doc.content || '';
+        contentSpan.textContent = content.length > 150 ? content.substring(0, 150) + '...' : content;
+        
+        itemDiv.appendChild(scoreSpan);
+        itemDiv.appendChild(contentSpan);
+        contentDiv.appendChild(itemDiv);
+    });
+    
+    contextDiv.appendChild(headerDiv);
+    contextDiv.appendChild(contentDiv);
+    
+    // 添加折叠/展开功能
+    let isCollapsed = false;
+    headerDiv.addEventListener('click', () => {
+        if (isCollapsed) {
+            contentDiv.style.maxHeight = '200px';
+            contentDiv.style.opacity = '1';
+            toggleIcon.style.transform = 'rotate(0deg)';
+            toggleIcon.textContent = '▼';
+        } else {
+            contentDiv.style.maxHeight = '0';
+            contentDiv.style.opacity = '0';
+            toggleIcon.style.transform = 'rotate(-90deg)';
+            toggleIcon.textContent = '▶';
+        }
+        isCollapsed = !isCollapsed;
+    });
+    
+    messageContextArea.appendChild(contextDiv);
+    
+    // 滚动到底部
+    const container = document.getElementById('messageContainer');
+    container.scrollTop = container.scrollHeight;
+}
+
+// 知识库选择变化
+document.getElementById('kbSelect').addEventListener('change', (e) => {
+    currentKbId = e.target.value ? parseInt(e.target.value) : null;
+    const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    
+    // 始终启用输入框，允许用户不选择知识库也能聊天
+    input.disabled = false;
+    sendBtn.disabled = false;
+    
+    if (currentKbId) {
+        input.placeholder = '输入您的问题（使用知识库）...';
+    } else {
+        input.placeholder = '输入您的问题（不使用知识库）...';
+    }
+});
+
+// 初始化输入框状态和功能
+document.addEventListener('DOMContentLoaded', function() {
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const charCount = document.getElementById('charCount');
+    
+    // 启用输入框，允许用户直接开始聊天
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
+    messageInput.placeholder = '输入您的问题...';
+    
+    // 自动调整textarea高度
+    function adjustTextareaHeight() {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+    }
+    
+    // 更新字符计数
+    function updateCharCount() {
+        const count = messageInput.value.length;
+        charCount.textContent = count;
+        
+        // 根据字符数量改变颜色
+        if (count > 1800) {
+            charCount.style.color = '#dc3545'; // 红色警告
+        } else if (count > 1500) {
+            charCount.style.color = '#fd7e14'; // 橙色提醒
+        } else {
+            charCount.style.color = 'var(--text-secondary, #999)';
+        }
+        
+        // 超过限制时禁用发送按钮
+        if (count > 2000) {
+            sendBtn.disabled = true;
+            sendBtn.title = '消息过长，请缩短后再发送';
+        } else if (count === 0) {
+            sendBtn.disabled = true;
+            sendBtn.title = '';
+        } else {
+            sendBtn.disabled = false;
+            sendBtn.title = '';
+        }
+    }
+    
+    // 绑定事件
+    messageInput.addEventListener('input', function() {
+        adjustTextareaHeight();
+        updateCharCount();
+    });
+    
+    messageInput.addEventListener('keydown', function(e) {
+        // Shift+Enter换行，Enter发送
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!sendBtn.disabled) {
+                document.getElementById('chatForm').dispatchEvent(new Event('submit'));
+            }
+        }
+    });
+    
+    // 初始化
+    updateCharCount();
+});
+</script>
+</body>
+</html>
+{{end}}

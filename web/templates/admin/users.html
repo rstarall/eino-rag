@@ -1,0 +1,303 @@
+{{define "admin/users.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<div class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="admin-sidebar">
+        <div style="padding: 1.5rem;">
+            <h2 style="color: var(--primary-color);">管理后台</h2>
+        </div>
+        
+        <nav class="admin-nav">
+            <a href="/admin/" class="admin-nav-item">仪表板</a>
+            <a href="/admin/knowledge-bases" class="admin-nav-item">知识库管理</a>
+            <a href="/admin/documents" class="admin-nav-item">文档管理</a>
+            <a href="/admin/users" class="admin-nav-item active">用户管理</a>
+            <a href="/admin/settings" class="admin-nav-item">系统设置</a>
+            <div style="border-top: 1px solid var(--border-color); margin: 1rem 0;"></div>
+            <a href="/" class="admin-nav-item">返回前台</a>
+            <a href="#" class="admin-nav-item logout-btn">退出登录</a>
+        </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="admin-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>用户管理</h1>
+            <button class="btn btn-primary" onclick="showAddUserModal()">添加用户</button>
+        </div>
+        
+        <!-- 用户列表 -->
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>姓名</th>
+                        <th>邮箱</th>
+                        <th>角色</th>
+                        <th>状态</th>
+                        <th>注册时间</th>
+                        <th>最后登录</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--text-secondary);">
+                            加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<!-- 添加/编辑用户模态框 -->
+<div class="modal" id="userModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">添加用户</h2>
+        </div>
+        
+        <form id="userForm">
+            <div class="modal-body">
+                <input type="hidden" id="userId">
+                
+                <div class="form-group">
+                    <label class="form-label">姓名</label>
+                    <input type="text" class="form-control" id="userName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">邮箱</label>
+                    <input type="email" class="form-control" id="userEmail" required>
+                </div>
+                
+                <div class="form-group" id="passwordGroup">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-control" id="userPassword">
+                    <small style="color: var(--text-secondary);">编辑用户时留空表示不修改密码</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">角色</label>
+                    <select class="form-control" id="userRole" required>
+                        <option value="user">普通用户</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">状态</label>
+                    <select class="form-control" id="userStatus" required>
+                        <option value="active">激活</option>
+                        <option value="inactive">禁用</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="hideModal()">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+<script>
+let currentPage = 1;
+const pageSize = 10;
+
+// 加载用户列表
+async function loadUsers() {
+    try {
+        const result = await api.users.list(currentPage, pageSize);
+        if (result.success) {
+            displayUsers(result.users);
+            // 可以在这里处理分页信息
+            // result.total, result.page, result.page_size
+        }
+    } catch (error) {
+        utils.showMessage('加载用户列表失败', 'error');
+        console.error('Failed to load users:', error);
+    }
+}
+
+// 显示用户列表
+function displayUsers(users) {
+    const tbody = document.getElementById('usersTableBody');
+    
+    if (users.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-secondary);">
+                    暂无用户数据
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = users.map(user => `
+        <tr>
+            <td>${user.id}</td>
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>
+                <span class="badge ${user.role_name === 'admin' ? 'badge-primary' : 'badge-secondary'}">
+                    ${user.role_name === 'admin' ? '管理员' : '普通用户'}
+                </span>
+            </td>
+            <td>
+                <span class="badge ${user.status === 'active' ? 'badge-success' : 'badge-danger'}">
+                    ${user.status === 'active' ? '激活' : '禁用'}
+                </span>
+            </td>
+            <td>${new Date(user.created_at).toLocaleString()}</td>
+            <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString() : '从未登录'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick="editUser(${user.id})">编辑</button>
+                <button class="btn btn-sm ${user.status === 'active' ? 'btn-warning' : 'btn-success'}" 
+                        onclick="toggleUserStatus(${user.id}, '${user.status}')">
+                    ${user.status === 'active' ? '禁用' : '激活'}
+                </button>
+                ${user.id !== 1 ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">删除</button>` : ''}
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 显示添加用户模态框
+function showAddUserModal() {
+    document.getElementById('modalTitle').textContent = '添加用户';
+    document.getElementById('userId').value = '';
+    document.getElementById('userName').value = '';
+    document.getElementById('userEmail').value = '';
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userRole').value = 'user';
+    document.getElementById('userStatus').value = 'active';
+    document.getElementById('passwordGroup').style.display = 'block';
+    document.getElementById('userModal').style.display = 'flex';
+}
+
+// 隐藏模态框
+function hideModal() {
+    document.getElementById('userModal').style.display = 'none';
+}
+
+// 编辑用户
+async function editUser(id) {
+    try {
+        const result = await api.users.get(id);
+        if (result.success) {
+            const user = result.user;
+            
+            document.getElementById('modalTitle').textContent = '编辑用户';
+            document.getElementById('userId').value = user.id;
+            document.getElementById('userName').value = user.name;
+            document.getElementById('userEmail').value = user.email;
+            document.getElementById('userPassword').value = '';
+            document.getElementById('userRole').value = user.role_name || 'user';
+            document.getElementById('userStatus').value = user.status || 'active';
+            document.getElementById('userModal').style.display = 'flex';
+        }
+    } catch (error) {
+        utils.showMessage('加载用户详情失败', 'error');
+        console.error('Failed to get user:', error);
+    }
+}
+
+// 保存用户
+document.getElementById('userForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('userId').value;
+    const name = document.getElementById('userName').value;
+    const email = document.getElementById('userEmail').value;
+    const password = document.getElementById('userPassword').value;
+    const role = document.getElementById('userRole').value;
+    const status = document.getElementById('userStatus').value;
+    
+    try {
+        if (id) {
+            // 编辑用户
+            const updateData = { name, email, role_name: role, status };
+            if (password) {
+                updateData.password = password;
+            }
+            await api.users.update(id, updateData);
+            utils.showMessage('更新成功', 'success');
+        } else {
+            // 添加用户
+            if (!password) {
+                utils.showMessage('请输入密码', 'error');
+                return;
+            }
+            await api.users.create({ name, email, password, role_name: role, status });
+            utils.showMessage('添加成功', 'success');
+        }
+        hideModal();
+        loadUsers();
+    } catch (error) {
+        utils.showMessage(error.message || '保存失败', 'error');
+        console.error('Failed to save user:', error);
+    }
+});
+
+// 切换用户状态
+async function toggleUserStatus(id, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const action = newStatus === 'inactive' ? '禁用' : '激活';
+    
+    if (!confirm(`确定要${action}该用户吗？`)) return;
+    
+    try {
+        await api.users.updateStatus(id, newStatus);
+        utils.showMessage(`${action}成功`, 'success');
+        loadUsers();
+    } catch (error) {
+        utils.showMessage(`${action}失败`, 'error');
+        console.error('Failed to update user status:', error);
+    }
+}
+
+// 删除用户
+async function deleteUser(id) {
+    if (!confirm('确定要删除该用户吗？此操作不可恢复。')) return;
+    
+    try {
+        await api.users.delete(id);
+        utils.showMessage('删除成功', 'success');
+        loadUsers();
+    } catch (error) {
+        utils.showMessage('删除失败', 'error');
+        console.error('Failed to delete user:', error);
+    }
+}
+
+// 点击模态框外部关闭
+document.getElementById('userModal').addEventListener('click', (e) => {
+    if (e.target.id === 'userModal') {
+        hideModal();
+    }
+});
+
+// 初始化
+loadUsers();
+</script>
+</body>
+</html>
+{{end}}

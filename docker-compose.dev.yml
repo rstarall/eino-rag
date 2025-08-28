@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  eino-rag-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8088:8080"  # 使用8088端口避免冲突
+      - "2345:2345"  # Delve调试端口
+    env_file:
+      - .env
+    environment:
+      # 连接到宿主机上的服务
+      - MILVUS_HOST=host.docker.internal
+      - MILVUS_PORT=19530
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - REDIS_URL=redis://host.docker.internal:6379
+      - EMBEDDING_MODEL=bge-m3
+      - GIN_MODE=debug
+      # 覆盖数据库路径，使用容器内路径
+      - DB_PATH=/app/data/eino-rag.db
+    volumes:
+      - ./:/app
+      - /app/tmp  # 排除临时文件目录
+      - /app/data # 持久化数据目录
+    working_dir: /app
+    command: air -c .air.toml
+    # 添加额外主机映射以访问宿主机服务
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

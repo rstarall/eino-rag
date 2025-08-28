@@ -1,0 +1,38 @@
+# 开发环境Dockerfile，支持热重载和调试
+FROM golang:1.24-alpine AS base
+
+# 设置Go环境变量
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOSUMDB=sum.golang.google.cn
+ENV GO111MODULE=on
+ENV CGO_ENABLED=0
+
+# 设置中科院镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+
+# 更新包索引并安装必要工具
+RUN apk update && apk add --no-cache git curl ca-certificates
+
+# 更新CA证书
+RUN update-ca-certificates
+
+# 安装Air热重载工具
+RUN go install github.com/air-verse/air@latest
+
+# 安装Delve调试器
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制go.mod和go.sum
+COPY go.mod go.sum ./
+
+# 下载依赖
+RUN go mod download && go mod tidy
+
+# 暴露端口
+EXPOSE 8080 2345
+
+# 默认命令使用Air进行热重载
+CMD ["air", "-c", ".air.toml"]

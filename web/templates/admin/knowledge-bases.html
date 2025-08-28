@@ -1,0 +1,227 @@
+{{define "admin/knowledge-bases.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<div class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="admin-sidebar">
+        <div style="padding: 1.5rem;">
+            <h2 style="color: var(--primary-color);">管理后台</h2>
+        </div>
+        
+        <nav class="admin-nav">
+            <a href="/admin/" class="admin-nav-item">仪表板</a>
+            <a href="/admin/knowledge-bases" class="admin-nav-item active">知识库管理</a>
+            <a href="/admin/documents" class="admin-nav-item">文档管理</a>
+            <a href="/admin/users" class="admin-nav-item">用户管理</a>
+            <a href="/admin/settings" class="admin-nav-item">系统设置</a>
+            <div style="border-top: 1px solid var(--border-color); margin: 1rem 0;"></div>
+            <a href="/" class="admin-nav-item">返回前台</a>
+            <a href="#" class="admin-nav-item logout-btn">退出登录</a>
+        </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="admin-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>知识库管理</h1>
+            <button class="btn btn-primary" onclick="showCreateModal()">创建知识库</button>
+        </div>
+        
+        <!-- 知识库列表 -->
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>名称</th>
+                        <th>描述</th>
+                        <th>文档数</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="kbTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-secondary);">
+                            加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<!-- 创建/编辑模态框 -->
+<div class="modal" id="kbModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">创建知识库</h2>
+        </div>
+        
+        <form id="kbForm">
+            <div class="modal-body">
+                <input type="hidden" id="kbId">
+                
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="form-control" id="kbName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">描述</label>
+                    <textarea class="form-control" id="kbDescription" rows="3"></textarea>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="hideModal()">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+<script>
+let currentPage = 1;
+const pageSize = 10;
+
+// 加载知识库列表
+async function loadKnowledgeBases() {
+    try {
+        const result = await api.knowledgeBase.list(currentPage, pageSize);
+        if (result.success) {
+            displayKnowledgeBases(result.knowledge_bases);
+        }
+    } catch (error) {
+        utils.showMessage('加载知识库列表失败', 'error');
+    }
+}
+
+// 显示知识库列表
+function displayKnowledgeBases(kbs) {
+    const tbody = document.getElementById('kbTableBody');
+    
+    if (kbs.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-secondary);">
+                    暂无知识库
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = kbs.map(kb => `
+        <tr>
+            <td>${kb.id}</td>
+            <td>${kb.name}</td>
+            <td>${kb.description || '-'}</td>
+            <td>${kb.doc_count || 0}</td>
+            <td>${new Date(kb.created_at).toLocaleString()}</td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick="editKnowledgeBase(${kb.id})">编辑</button>
+                <button class="btn btn-sm btn-secondary" onclick="viewDocuments(${kb.id})">文档</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteKnowledgeBase(${kb.id})">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 显示创建模态框
+function showCreateModal() {
+    document.getElementById('modalTitle').textContent = '创建知识库';
+    document.getElementById('kbId').value = '';
+    document.getElementById('kbName').value = '';
+    document.getElementById('kbDescription').value = '';
+    document.getElementById('kbModal').style.display = 'flex';
+}
+
+// 隐藏模态框
+function hideModal() {
+    document.getElementById('kbModal').style.display = 'none';
+}
+
+// 编辑知识库
+async function editKnowledgeBase(id) {
+    try {
+        const result = await api.knowledgeBase.get(id);
+        if (result.success) {
+            const kb = result.knowledge_base;
+            document.getElementById('modalTitle').textContent = '编辑知识库';
+            document.getElementById('kbId').value = kb.id;
+            document.getElementById('kbName').value = kb.name;
+            document.getElementById('kbDescription').value = kb.description || '';
+            document.getElementById('kbModal').style.display = 'flex';
+        }
+    } catch (error) {
+        utils.showMessage('加载知识库详情失败', 'error');
+    }
+}
+
+// 保存知识库
+document.getElementById('kbForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('kbId').value;
+    const name = document.getElementById('kbName').value;
+    const description = document.getElementById('kbDescription').value;
+    
+    try {
+        if (id) {
+            await api.knowledgeBase.update(id, { name, description });
+            utils.showMessage('更新成功', 'success');
+        } else {
+            await api.knowledgeBase.create(name, description);
+            utils.showMessage('创建成功', 'success');
+        }
+        hideModal();
+        loadKnowledgeBases();
+    } catch (error) {
+        utils.showMessage(error.message || '保存失败', 'error');
+    }
+});
+
+// 删除知识库
+async function deleteKnowledgeBase(id) {
+    if (!confirm('确定要删除这个知识库吗？')) return;
+    
+    try {
+        await api.knowledgeBase.delete(id);
+        utils.showMessage('删除成功', 'success');
+        loadKnowledgeBases();
+    } catch (error) {
+        utils.showMessage('删除失败', 'error');
+    }
+}
+
+// 查看文档
+function viewDocuments(kbId) {
+    window.location.href = `/admin/documents?kb_id=${kbId}`;
+}
+
+// 点击模态框外部关闭
+document.getElementById('kbModal').addEventListener('click', (e) => {
+    if (e.target.id === 'kbModal') {
+        hideModal();
+    }
+});
+
+// 初始化
+loadKnowledgeBases();
+</script>
+</body>
+</html>
+{{end}}

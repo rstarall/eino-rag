@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(go run:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ls:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker restart:*)",
+      "Bash(curl:*)",
+      "Bash(mkdir:*)",
+      "Bash(go get:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": []
+  }
+}

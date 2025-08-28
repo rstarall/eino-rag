@@ -1,0 +1,396 @@
+{{define "admin/documents.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<div class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="admin-sidebar">
+        <div style="padding: 1.5rem;">
+            <h2 style="color: var(--primary-color);">管理后台</h2>
+        </div>
+        
+        <nav class="admin-nav">
+            <a href="/admin/" class="admin-nav-item">仪表板</a>
+            <a href="/admin/knowledge-bases" class="admin-nav-item">知识库管理</a>
+            <a href="/admin/documents" class="admin-nav-item active">文档管理</a>
+            <a href="/admin/users" class="admin-nav-item">用户管理</a>
+            <a href="/admin/settings" class="admin-nav-item">系统设置</a>
+            <div style="border-top: 1px solid var(--border-color); margin: 1rem 0;"></div>
+            <a href="/" class="admin-nav-item">返回前台</a>
+            <a href="#" class="admin-nav-item logout-btn">退出登录</a>
+        </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="admin-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>文档管理</h1>
+            <div style="display: flex; gap: 1rem;">
+                <select class="form-control" id="kbSelect" style="width: 200px;">
+                    <option value="">全部知识库</option>
+                </select>
+                <button class="btn btn-primary" onclick="showUploadModal()">上传文档</button>
+            </div>
+        </div>
+        
+        <!-- 文档列表 -->
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>文件名</th>
+                        <th>知识库</th>
+                        <th>文件类型</th>
+                        <th>文件大小</th>
+                        <th>状态</th>
+                        <th>上传时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="docsTableBody">
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--text-secondary);">
+                            加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<!-- 上传文档模态框 -->
+<div class="modal" id="uploadModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>上传文档</h2>
+        </div>
+        
+        <form id="uploadForm">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">选择知识库</label>
+                    <select class="form-control" id="uploadKbSelect" required>
+                        <option value="">请选择知识库</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">选择文件</label>
+                    <input type="file" class="form-control" id="fileInput" 
+                           accept=".txt,.md,.pdf,.doc,.docx" required>
+                    <small style="color: var(--text-secondary);">
+                        支持的格式：TXT, Markdown, PDF, Word
+                    </small>
+                </div>
+                
+                <div id="uploadProgress" style="display: none; margin-top: 1rem;">
+                    <div style="background: var(--border-color); height: 4px; border-radius: 2px;">
+                        <div id="progressBar" style="background: var(--primary-color); height: 100%; border-radius: 2px; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p style="margin-top: 0.5rem; color: var(--text-secondary); text-align: center;">
+                        <span id="progressText">0%</span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="hideModal()">取消</button>
+                <button type="submit" class="btn btn-primary" id="uploadBtn">上传</button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js?v=1.1"></script>
+<script>
+let currentPage = 1;
+const pageSize = 10;
+let currentKbId = '';
+
+// 获取URL参数
+const urlParams = new URLSearchParams(window.location.search);
+const kbIdFromUrl = urlParams.get('kb_id');
+if (kbIdFromUrl) {
+    currentKbId = kbIdFromUrl;
+    console.log('URL kb_id:', currentKbId);
+}
+
+// 加载知识库列表
+async function loadKnowledgeBases() {
+    try {
+        const result = await api.knowledgeBase.list(1, 100);
+        if (result.success) {
+            const select = document.getElementById('kbSelect');
+            const uploadSelect = document.getElementById('uploadKbSelect');
+            
+            select.innerHTML = '<option value="">全部知识库</option>';
+            uploadSelect.innerHTML = '<option value="">请选择知识库</option>';
+            
+            result.knowledge_bases.forEach(kb => {
+                const option = document.createElement('option');
+                option.value = kb.id;
+                option.textContent = kb.name;
+                select.appendChild(option);
+                
+                const uploadOption = option.cloneNode(true);
+                uploadSelect.appendChild(uploadOption);
+            });
+            
+            // 如果有URL参数，设置选中的知识库
+            if (currentKbId) {
+                console.log('Setting kb_id:', currentKbId);
+                select.value = currentKbId;
+                uploadSelect.value = currentKbId;
+                // 触发加载该知识库的文档
+                loadDocuments();
+            }
+        }
+    } catch (error) {
+        console.error('加载知识库失败:', error);
+    }
+}
+
+// 加载文档列表
+async function loadDocuments() {
+    try {
+        const tbody = document.getElementById('docsTableBody');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-secondary);">
+                    加载中...
+                </td>
+            </tr>
+        `;
+        
+        let documents = [];
+        let total = 0;
+        
+        if (currentKbId) {
+            // 如果选择了特定知识库，调用知识库文档API
+            console.log('Loading documents for kb_id:', currentKbId);
+            const result = await api.document.list(currentKbId, currentPage, pageSize);
+            if (result.success) {
+                documents = result.documents || [];
+                total = result.total || 0;
+                
+                // 获取知识库信息以添加kb_name
+                const kbResult = await api.knowledgeBase.get(currentKbId);
+                if (kbResult.success && kbResult.data) {
+                    documents = documents.map(doc => ({
+                        ...doc,
+                        kb_name: kbResult.data.name
+                    }));
+                }
+            } else {
+                console.error('Failed to load documents:', result);
+                throw new Error(result.message || '加载文档失败');
+            }
+        } else {
+            // 如果没有选择知识库，使用新的全局文档API
+            const result = await api.document.listAll(currentPage, pageSize);
+            if (result.success) {
+                documents = result.documents || [];
+                total = result.total || 0;
+            }
+        }
+        
+        displayDocuments(documents, total);
+    } catch (error) {
+        console.error('加载文档列表失败:', error);
+        const tbody = document.getElementById('docsTableBody');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--error-color);">
+                    加载失败：${error.message || '未知错误'}
+                </td>
+            </tr>
+        `;
+        utils.showMessage('加载文档列表失败: ' + (error.message || '未知错误'), 'error');
+    }
+}
+
+// 显示文档列表
+function displayDocuments(docs, total) {
+    const tbody = document.getElementById('docsTableBody');
+    
+    if (docs.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-secondary);">
+                    暂无文档
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = docs.map(doc => {
+        // 从文件名提取文件类型
+        const fileExt = doc.file_name.split('.').pop().toLowerCase();
+        
+        return `
+            <tr>
+                <td>${doc.id}</td>
+                <td title="${doc.file_name}">${doc.file_name}</td>
+                <td>${doc.kb_name || '-'}</td>
+                <td>${fileExt.toUpperCase()}</td>
+                <td>${formatFileSize(doc.file_size)}</td>
+                <td>
+                    <span class="badge badge-success">
+                        已上传
+                    </span>
+                </td>
+                <td>${new Date(doc.created_at).toLocaleString('zh-CN')}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline" onclick="viewDocument(${doc.id})">查看</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteDocument(${doc.id})">删除</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    // 如果有total，可以在这里添加分页控件
+    if (total && total > pageSize) {
+        // TODO: 添加分页控件
+    }
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 获取状态徽章类
+function getStatusBadgeClass(status) {
+    const statusMap = {
+        'pending': 'badge-warning',
+        'processing': 'badge-primary',
+        'processed': 'badge-success',
+        'failed': 'badge-danger'
+    };
+    return statusMap[status] || 'badge-secondary';
+}
+
+// 获取状态文本
+function getStatusText(status) {
+    const statusMap = {
+        'pending': '待处理',
+        'processing': '处理中',
+        'processed': '已处理',
+        'failed': '处理失败'
+    };
+    return statusMap[status] || status;
+}
+
+// 显示上传模态框
+function showUploadModal() {
+    document.getElementById('uploadModal').style.display = 'flex';
+    document.getElementById('uploadProgress').style.display = 'none';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressText').textContent = '0%';
+}
+
+// 隐藏模态框
+function hideModal() {
+    document.getElementById('uploadModal').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+}
+
+// 上传文档
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const file = document.getElementById('fileInput').files[0];
+    const kbId = document.getElementById('uploadKbSelect').value;
+    
+    if (!file || !kbId) {
+        utils.showMessage('请选择文件和知识库', 'error');
+        return;
+    }
+    
+    // 显示进度条
+    document.getElementById('uploadProgress').style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+    
+    try {
+        const result = await api.document.upload(file, kbId);
+        
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = '100%';
+        
+        if (result.success) {
+            utils.showMessage('上传成功', 'success');
+            setTimeout(() => {
+                hideModal();
+                loadDocuments();
+            }, 1000);
+        } else {
+            throw new Error(result.message || '上传失败');
+        }
+    } catch (error) {
+        utils.showMessage('上传失败: ' + error.message, 'error');
+    } finally {
+        document.getElementById('uploadBtn').disabled = false;
+    }
+});
+
+// 查看文档
+function viewDocument(id) {
+    // 这里可以实现文档预览功能
+    utils.showMessage('文档预览功能开发中', 'info');
+}
+
+// 删除文档
+async function deleteDocument(id) {
+    if (!confirm('确定要删除这个文档吗？')) return;
+    
+    try {
+        await api.document.delete(id);
+        utils.showMessage('删除成功', 'success');
+        loadDocuments();
+    } catch (error) {
+        utils.showMessage('删除失败', 'error');
+    }
+}
+
+// 知识库选择变化
+document.getElementById('kbSelect').addEventListener('change', (e) => {
+    currentKbId = e.target.value;
+    loadDocuments();
+});
+
+// 点击模态框外部关闭
+document.getElementById('uploadModal').addEventListener('click', (e) => {
+    if (e.target.id === 'uploadModal') {
+        hideModal();
+    }
+});
+
+// 初始化
+loadKnowledgeBases().then(() => {
+    // 知识库列表加载完成后再加载文档
+    if (!currentKbId) {
+        // 如果没有指定知识库ID，加载所有文档
+        loadDocuments();
+    }
+    // 如果有指定知识库ID，会在loadKnowledgeBases中触发loadDocuments
+});
+</script>
+</body>
+</html>
+{{end}}

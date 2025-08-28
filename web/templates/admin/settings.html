@@ -1,0 +1,500 @@
+{{define "admin/settings.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <div id="alert-container" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;"></div>
+<div class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="admin-sidebar">
+        <div style="padding: 1.5rem;">
+            <h2 style="color: var(--primary-color);">管理后台</h2>
+        </div>
+        
+        <nav class="admin-nav">
+            <a href="/admin/" class="admin-nav-item">仪表板</a>
+            <a href="/admin/knowledge-bases" class="admin-nav-item">知识库管理</a>
+            <a href="/admin/documents" class="admin-nav-item">文档管理</a>
+            <a href="/admin/users" class="admin-nav-item">用户管理</a>
+            <a href="/admin/settings" class="admin-nav-item active">系统设置</a>
+            <div style="border-top: 1px solid var(--border-color); margin: 1rem 0;"></div>
+            <a href="/" class="admin-nav-item">返回前台</a>
+            <a href="#" class="admin-nav-item logout-btn">退出登录</a>
+        </nav>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="admin-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>系统设置</h1>
+            <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+        </div>
+        
+        <!-- 设置表单 -->
+        <form id="settingsForm">
+            <!-- 服务器设置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">服务器设置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">服务器地址</label>
+                    <input type="text" class="form-control" id="serverHost" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">服务器端口</label>
+                    <input type="text" class="form-control" id="serverPort" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">运行模式</label>
+                    <input type="text" class="form-control" id="ginMode" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">数据库路径</label>
+                    <input type="text" class="form-control" id="dbPath" readonly>
+                </div>
+            </div>
+            
+            <!-- Ollama 配置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">Ollama 配置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Ollama 服务地址</label>
+                    <input type="text" class="form-control" id="ollamaBaseUrl" value="http://localhost:11434">
+                    <small style="color: var(--text-secondary);">本地或远程 Ollama 服务的地址</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Ollama Embedding 模型</label>
+                    <input type="text" class="form-control" id="embeddingModel" placeholder="例如: bge-m3, nomic-embed-text">
+                    <small style="color: var(--text-secondary);">用于文本向量化的模型</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Ollama LLM 模型</label>
+                    <input type="text" class="form-control" id="llmModel" placeholder="例如: llama2, mistral, qwen:7b">
+                    <small style="color: var(--text-secondary);">用于对话和生成的大语言模型</small>
+                </div>
+            </div>
+            
+            <!-- OpenAI 配置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">OpenAI 配置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">OpenAI API Key</label>
+                    <div style="position: relative;">
+                        <input type="password" class="form-control" id="openaiApiKey" placeholder="sk-..." style="padding-right: 50px;">
+                        <button type="button" class="btn-toggle-password" onclick="togglePassword('openaiApiKey')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid var(--border-color); padding: 5px 10px; cursor: pointer; border-radius: 4px;">
+                            <span id="openaiApiKey-text">显示</span>
+                        </button>
+                    </div>
+                    <small style="color: var(--text-secondary);">您的 OpenAI API 密钥</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">OpenAI 模型</label>
+                    <input type="text" class="form-control" id="openaiModel" placeholder="例如: gpt-3.5-turbo, gpt-4">
+                    <small style="color: var(--text-secondary);">用于对话和生成的 OpenAI 模型</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">OpenAI Base URL</label>
+                    <input type="text" class="form-control" id="openaiBaseUrl" placeholder="https://api.openai.com/v1">
+                    <small style="color: var(--text-secondary);">自定义 API 端点，一般保持默认即可</small>
+                </div>
+            </div>
+            
+            <!-- 向量数据库设置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">向量数据库设置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Milvus地址</label>
+                    <input type="text" class="form-control" id="milvusAddress" value="localhost:19530">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Collection名称</label>
+                    <input type="text" class="form-control" id="collectionName" value="eino_rag_documents">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">向量维度</label>
+                    <input type="number" class="form-control" id="vectorDimension" value="1024" readonly>
+                    <small style="color: var(--text-secondary);">根据Embedding模型自动设置</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">距离度量类型</label>
+                    <select class="form-control" id="metricType">
+                        <option value="L2">L2 (欧几里得距离)</option>
+                        <option value="IP">IP (内积)</option>
+                        <option value="COSINE">COSINE (余弦相似度)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">索引类型</label>
+                    <select class="form-control" id="indexType">
+                        <option value="IVF_FLAT">IVF_FLAT</option>
+                        <option value="IVF_SQ8">IVF_SQ8</option>
+                        <option value="IVF_PQ">IVF_PQ</option>
+                        <option value="HNSW">HNSW</option>
+                        <option value="AUTOINDEX">AUTOINDEX</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- RAG设置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">RAG设置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">分块大小</label>
+                    <input type="number" class="form-control" id="chunkSize" min="100" max="2000" value="500">
+                    <small style="color: var(--text-secondary);">文档分块的字符数</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">分块重叠</label>
+                    <input type="number" class="form-control" id="chunkOverlap" min="0" max="500" value="50">
+                    <small style="color: var(--text-secondary);">相邻分块之间的重叠字符数</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">分块策略</label>
+                    <select class="form-control" id="chunkingStrategy">
+                        <option value="length">按长度分块</option>
+                        <option value="semantic">语义分块</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">检索数量 (Top K)</label>
+                    <input type="number" class="form-control" id="topK" min="1" max="20" value="5">
+                    <small style="color: var(--text-secondary);">返回最相关的文档块数量</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">相似度阈值</label>
+                    <input type="number" class="form-control" id="scoreThreshold" min="0" max="1" step="0.1" value="0.7">
+                    <small style="color: var(--text-secondary);">低于此阈值的结果将被过滤</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">嵌入缓存</label>
+                    <select class="form-control" id="embeddingCache">
+                        <option value="true">启用</option>
+                        <option value="false">禁用</option>
+                    </select>
+                    <small style="color: var(--text-secondary);">缓存已计算的文本嵌入向量</small>
+                </div>
+            </div>
+            
+            <!-- Redis 配置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">Redis 配置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Redis URL</label>
+                    <input type="text" class="form-control" id="redisUrl" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Redis 数据库索引</label>
+                    <input type="number" class="form-control" id="redisDb" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Redis 密码</label>
+                    <div style="position: relative;">
+                        <input type="password" class="form-control" id="redisPassword" readonly style="padding-right: 50px;">
+                        <button type="button" class="btn-toggle-password" onclick="togglePassword('redisPassword')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid var(--border-color); padding: 5px 10px; cursor: pointer; border-radius: 4px;">
+                            <span id="redisPassword-text">显示</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 身份验证配置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">身份验证配置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">JWT Secret</label>
+                    <div style="position: relative;">
+                        <input type="password" class="form-control" id="jwtSecret" readonly style="padding-right: 50px;">
+                        <button type="button" class="btn-toggle-password" onclick="togglePassword('jwtSecret')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid var(--border-color); padding: 5px 10px; cursor: pointer; border-radius: 4px;">
+                            <span id="jwtSecret-text">显示</span>
+                        </button>
+                    </div>
+                    <small style="color: var(--text-secondary);">JWT 令牌签名密钥</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">JWT 过期时间 (小时)</label>
+                    <input type="number" class="form-control" id="jwtExpireHours" min="1" max="720" value="24" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Session Secret</label>
+                    <div style="position: relative;">
+                        <input type="password" class="form-control" id="sessionSecret" readonly style="padding-right: 50px;">
+                        <button type="button" class="btn-toggle-password" onclick="togglePassword('sessionSecret')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid var(--border-color); padding: 5px 10px; cursor: pointer; border-radius: 4px;">
+                            <span id="sessionSecret-text">显示</span>
+                        </button>
+                    </div>
+                    <small style="color: var(--text-secondary);">Session 加密密钥</small>
+                </div>
+            </div>
+            
+            <!-- 上传配置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">上传配置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">最大上传文件大小 (字节)</label>
+                    <input type="number" class="form-control" id="maxUploadSize" readonly>
+                    <small style="color: var(--text-secondary);">当前设置：<span id="maxUploadSizeMB"></span> MB</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">允许的文件类型</label>
+                    <input type="text" class="form-control" id="allowedFileTypes" value=".pdf,.txt,.md,.markdown,.json,.csv,.html,.htm">
+                    <small style="color: var(--text-secondary);">逗号分隔的文件扩展名列表</small>
+                </div>
+            </div>
+            
+            <!-- 超时设置 -->
+            <div class="card">
+                <h2 style="margin-bottom: 1.5rem;">超时设置</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">索引超时 (秒)</label>
+                    <input type="number" class="form-control" id="indexTimeout" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Milvus 插入超时 (秒)</label>
+                    <input type="number" class="form-control" id="milvusInsertTimeout" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Milvus 连接超时 (秒)</label>
+                    <input type="number" class="form-control" id="milvusConnectTimeout" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Embedding 超时 (秒)</label>
+                    <input type="number" class="form-control" id="embeddingTimeout" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">gRPC Keepalive 时间 (秒)</label>
+                    <input type="number" class="form-control" id="grpcKeepaliveTime" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">gRPC Keepalive 超时 (秒)</label>
+                    <input type="number" class="form-control" id="grpcKeepaliveTimeout" readonly>
+                </div>
+            </div>
+        </form>
+    </main>
+</div>
+    
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+<script>
+// 加载系统配置
+async function loadSettings() {
+    try {
+        const result = await api.system.getConfig();
+        if (result.success && result.config) {
+            const config = result.config;
+            
+            // 填充表单 - 服务器设置
+            document.getElementById('serverHost').value = config.server_host || '0.0.0.0';
+            document.getElementById('serverPort').value = config.server_port || '8080';
+            document.getElementById('ginMode').value = config.gin_mode || 'debug';
+            document.getElementById('dbPath').value = config.db_path || './data/eino-rag.db';
+            
+            // Ollama 配置
+            document.getElementById('ollamaBaseUrl').value = config.ollama_base_url || 'http://localhost:11434';
+            document.getElementById('embeddingModel').value = config.embedding_model || 'bge-m3';
+            document.getElementById('llmModel').value = config.llm_model || 'llama2';
+            
+            // OpenAI 配置
+            if (config.openai_api_key) {
+                document.getElementById('openaiApiKey').value = config.openai_api_key;
+            }
+            document.getElementById('openaiModel').value = config.openai_model || 'gpt-4o';
+            if (config.openai_base_url) {
+                document.getElementById('openaiBaseUrl').value = config.openai_base_url;
+            }
+            
+            // 向量数据库设置
+            if (config.milvus_address) {
+                document.getElementById('milvusAddress').value = config.milvus_address;
+            }
+            document.getElementById('collectionName').value = config.collection_name || 'eino_rag_documents';
+            
+            // 根据实际的embedding模型设置向量维度
+            if (config.vector_dimension) {
+                document.getElementById('vectorDimension').value = config.vector_dimension;
+            }
+            
+            document.getElementById('metricType').value = config.metric_type || 'L2';
+            document.getElementById('indexType').value = config.index_type || 'IVF_FLAT';
+            
+            // Redis 配置
+            document.getElementById('redisUrl').value = config.redis_url || 'redis://localhost:6379';
+            document.getElementById('redisDb').value = config.redis_db || 0;
+            document.getElementById('redisPassword').value = config.redis_password || '';
+            
+            // 身份验证配置
+            document.getElementById('jwtSecret').value = config.jwt_secret || '';
+            document.getElementById('jwtExpireHours').value = config.jwt_expire_hours || 24;
+            document.getElementById('sessionSecret').value = config.session_secret || '';
+            
+            // 上传配置
+            if (config.max_upload_size) {
+                document.getElementById('maxUploadSize').value = config.max_upload_size;
+                document.getElementById('maxUploadSizeMB').textContent = Math.round(config.max_upload_size / (1024 * 1024));
+            }
+            
+            // 允许的文件类型
+            if (config.allowed_file_types) {
+                document.getElementById('allowedFileTypes').value = config.allowed_file_types.join(',');
+            }
+            
+            // 超时设置
+            document.getElementById('indexTimeout').value = config.index_timeout || 120;
+            document.getElementById('milvusInsertTimeout').value = config.milvus_insert_timeout || 60;
+            document.getElementById('milvusConnectTimeout').value = config.milvus_connect_timeout || 30;
+            document.getElementById('embeddingTimeout').value = config.embedding_timeout || 120;
+            document.getElementById('grpcKeepaliveTime').value = config.grpc_keepalive_time || 30;
+            document.getElementById('grpcKeepaliveTimeout').value = config.grpc_keepalive_timeout || 5;
+            
+            // RAG设置
+            document.getElementById('chunkSize').value = config.chunk_size || 500;
+            document.getElementById('chunkOverlap').value = config.chunk_overlap || 50;
+            document.getElementById('chunkingStrategy').value = config.chunking_strategy || 'length';
+            document.getElementById('topK').value = config.top_k || 5;
+            document.getElementById('scoreThreshold').value = config.score_threshold || 0.7;
+            document.getElementById('embeddingCache').value = config.embedding_cache ? 'true' : 'false';
+        }
+    } catch (error) {
+        console.error('加载配置失败:', error);
+        utils.showMessage('加载系统配置失败', 'error');
+    }
+}
+
+// 保存设置
+async function saveSettings() {
+    // 保存Milvus地址（支持多种格式）
+    const milvusAddress = document.getElementById('milvusAddress').value;
+    
+    const configs = {
+        
+        // Ollama 配置
+        ollama_base_url: document.getElementById('ollamaBaseUrl').value,
+        embedding_model: document.getElementById('embeddingModel').value,
+        llm_model: document.getElementById('llmModel').value,
+        
+        // OpenAI 配置
+        openai_api_key: document.getElementById('openaiApiKey').value,
+        openai_model: document.getElementById('openaiModel').value,
+        openai_base_url: document.getElementById('openaiBaseUrl').value,
+        
+        // 向量数据库设置
+        milvus_address: milvusAddress,  // 直接保存完整地址
+        collection_name: document.getElementById('collectionName').value,
+        vector_dimension: document.getElementById('vectorDimension').value,
+        metric_type: document.getElementById('metricType').value,
+        index_type: document.getElementById('indexType').value,
+        
+        // 上传配置
+        allowed_file_types: document.getElementById('allowedFileTypes').value,
+        
+        // RAG设置
+        chunk_size: document.getElementById('chunkSize').value,
+        chunk_overlap: document.getElementById('chunkOverlap').value,
+        chunking_strategy: document.getElementById('chunkingStrategy').value,
+        top_k: document.getElementById('topK').value,
+        score_threshold: document.getElementById('scoreThreshold').value,
+        embedding_cache: document.getElementById('embeddingCache').value === 'true'
+    };
+    
+    try {
+        const result = await api.system.updateConfig(configs);
+        if (result.success) {
+            utils.showMessage('设置保存成功，配置已生效', 'success');
+        }
+    } catch (error) {
+        utils.showMessage('保存失败: ' + (error.message || '未知错误'), 'error');
+    }
+}
+
+// 根据Embedding模型更新向量维度
+document.getElementById('embeddingModel').addEventListener('input', (e) => {
+    const dimMap = {
+        'bge-m3': 1024,
+        'bge-large': 1024,
+        'all-minilm': 384,
+        'nomic-embed-text': 768,
+        'text-embedding-ada-002': 1536,
+        'text-embedding-3-small': 1536,
+        'text-embedding-3-large': 3072
+    };
+    
+    // 尝试匹配常见模型名称
+    const modelName = e.target.value.toLowerCase();
+    let dim = 1024; // 默认维度
+    
+    for (const [key, value] of Object.entries(dimMap)) {
+        if (modelName.includes(key)) {
+            dim = value;
+            break;
+        }
+    }
+    
+    document.getElementById('vectorDimension').value = dim;
+});
+
+// 表单提交
+document.getElementById('settingsForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveSettings();
+});
+
+// 切换密码显示/隐藏
+function togglePassword(fieldId) {
+    const input = document.getElementById(fieldId);
+    const textSpan = document.getElementById(fieldId + '-text');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        textSpan.textContent = '隐藏';
+    } else {
+        input.type = 'password';
+        textSpan.textContent = '显示';
+    }
+}
+
+// 初始化
+loadSettings();
+</script>
+</body>
+</html>
+{{end}}
