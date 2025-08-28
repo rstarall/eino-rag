@@ -1,380 +1,380 @@
-# Eino RAG - 企业级智能检索增强生成系统
+# Eino RAG - Enterprise-Level Intelligent Retrieval-Augmented Generation System
 
-基于 Eino 框架构建的企业级 RAG (Retrieval-Augmented Generation) 系统，提供高性能的文档管理、向量检索和智能对话功能。
+An enterprise-level RAG (Retrieval-Augmented Generation) system built on the Eino framework, providing high-performance document management, vector retrieval, and intelligent conversation capabilities.
 
-## 特性
+## Features
 
-- 🚀 **高性能架构**：基于 Golang + Gin 框架，支持高并发访问
-- 📚 **知识库管理**：支持多知识库隔离，灵活的文档管理
-- 🔍 **智能检索**：基于 Milvus 向量数据库的语义搜索
-- 💬 **智能对话**：集成 OpenAI/Ollama，支持流式对话和Markdown渲染
-- 🔐 **完善的权限**：JWT 认证，角色权限管理
-- 📊 **管理后台**：美观的 Web 管理界面，响应式设计
-- ⚡ **Redis 缓存**：高频访问数据缓存，提升性能
-- 🐳 **容器化部署**：完整的 Docker Compose 配置
+- 🚀 **High-Performance Architecture**: Built on Golang + Gin framework, supporting high-concurrency access
+- 📚 **Knowledge Base Management**: Multi-knowledge base isolation with flexible document management
+- 🔍 **Intelligent Retrieval**: Semantic search based on Milvus vector database
+- 💬 **Intelligent Conversation**: Integrated with OpenAI/Ollama, supporting streaming chat and Markdown rendering
+- 🔐 **Comprehensive Permissions**: JWT authentication with role-based access control
+- 📊 **Admin Dashboard**: Beautiful web management interface with responsive design
+- ⚡ **Redis Caching**: High-frequency data caching for improved performance
+- 🐳 **Containerized Deployment**: Complete Docker Compose configuration
 
-## 技术栈
+## Tech Stack
 
-### 后端
+### Backend
 - Go 1.21+
-- Gin Web 框架
+- Gin Web Framework
 - Gorm ORM
-- SQLite 数据库
-- Redis 缓存
-- Milvus 向量数据库
-- JWT 认证
+- SQLite Database
+- Redis Cache
+- Milvus Vector Database
+- JWT Authentication
 
-### 前端
-- 原生 JavaScript
-- 响应式 CSS
-- Gin 模板引擎
-- Markdown-it 渲染
-- 流式聊天界面
+### Frontend
+- Vanilla JavaScript
+- Responsive CSS
+- Gin Template Engine
+- Markdown-it Rendering
+- Streaming Chat Interface
 
-### 集成
-- Eino AI 框架
+### Integrations
+- Eino AI Framework
 - OpenAI API
-- Ollama 本地模型
-- Swagger API 文档
+- Ollama Local Models
+- Swagger API Documentation
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
 - Docker & Docker Compose
-- Go 1.21+ (开发环境)
-- Make 工具
+- Go 1.21+ (for development)
+- Make tools
 
-### 部署方式
+### Deployment Options
 
-#### 方式一：Docker Compose 完整部署（推荐）
+#### Option 1: Complete Docker Compose Deployment (Recommended)
 
-1. 克隆项目
+1. Clone the project
 ```bash
 git clone https://github.com/rstarall/eino-rag.git
 cd eino-rag
 ```
 
-2. 复制环境配置
+2. Copy environment configuration
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，配置必要的参数
+# Edit .env file and configure necessary parameters
 ```
 
-3. 启动所有服务（包括依赖服务）
+3. Start all services (including dependencies)
 ```bash
-# 启动基础服务（Milvus、Redis、Ollama）
+# Start infrastructure services (Milvus, Redis, Ollama)
 make docker-up
 
-# 启动应用开发环境
+# Start application development environment
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
-应用将在 http://localhost:8088 启动
+The application will be available at http://localhost:8088
 
-#### 方式二：本地开发模式
+#### Option 2: Local Development Mode
 
-1. 启动依赖服务
+1. Start dependency services
 ```bash
 make docker-up
 ```
 
-2. 安装 Go 依赖
+2. Install Go dependencies
 ```bash
 make install-deps
 ```
 
-3. 创建必要目录
+3. Create necessary directories
 ```bash
 make init-dirs
 ```
 
-4. 运行应用
+4. Run the application
 ```bash
-# 普通模式
+# Normal mode
 make run
 
-# 或使用热重载开发模式
+# Or use hot-reload development mode
 make dev
 ```
 
-应用将在 http://localhost:8080 启动
+The application will be available at http://localhost:8080
 
-### 默认账号
+### Default Account
 
-系统启动时会自动创建初始管理员账户：
+The system automatically creates an initial admin account on startup:
 
-- **邮箱**: admin@eino-rag.com
-- **密码**: admin123456
+- **Email**: admin@eino-rag.com
+- **Password**: admin123456
 
-**重要提示**: 请在首次登录后立即修改默认密码！
+**Important**: Please change the default password immediately after first login!
 
-## Docker 服务说明
+## Docker Services Overview
 
-### 基础服务 (docker-compose.yml)
-- **Milvus**: 向量数据库 (端口: 19530)
-- **Redis**: 缓存服务 (端口: 6379)
-- **Ollama**: 本地LLM服务 (端口: 11434)
-- **etcd**: Milvus 元数据存储
-- **MinIO**: Milvus 对象存储
+### Infrastructure Services (docker-compose.yml)
+- **Milvus**: Vector database (Port: 19530)
+- **Redis**: Cache service (Port: 6379)
+- **Ollama**: Local LLM service (Port: 11434)
+- **etcd**: Milvus metadata storage
+- **MinIO**: Milvus object storage
 
-### 应用服务 (docker-compose.dev.yml)
-- **eino-rag-dev**: 应用开发环境 (端口: 8088)
-  - 支持热重载
-  - 调试端口: 2345
-  - 自动连接到基础服务
+### Application Service (docker-compose.dev.yml)
+- **eino-rag-dev**: Application development environment (Port: 8088)
+  - Hot reload support
+  - Debug port: 2345
+  - Auto-connects to infrastructure services
 
-## 项目结构
+## Project Structure
 
 ```
 eino-rag/
-├── cmd/server/         # 应用入口
-├── internal/           # 内部包
-│   ├── auth/          # 认证授权
-│   ├── config/        # 配置管理
-│   ├── db/            # 数据库连接
-│   ├── handlers/      # HTTP 处理器
-│   ├── middleware/    # 中间件
-│   ├── models/        # 数据模型
-│   └── services/      # 业务服务
-│       ├── chat/      # 聊天服务
-│       ├── document/  # 文档服务
-│       └── rag/       # RAG 核心服务
-├── pkg/               # 公共包
-│   ├── logger/        # 日志工具
-│   └── utils/         # 工具函数
-├── web/               # Web 资源
-│   ├── static/        # 静态文件
-│   │   ├── css/      # 样式文件
-│   │   ├── js/       # JavaScript 文件
-│   │   └── uploads/  # 上传文件目录
-│   └── templates/     # HTML 模板
-├── docs/              # API 文档
-├── data/              # 数据文件目录
-├── logs/              # 日志目录
-├── docker-compose.yml     # 基础服务配置
-├── docker-compose.dev.yml # 开发环境配置
-├── Dockerfile         # 生产环境镜像
-├── Dockerfile.dev     # 开发环境镜像
-└── Makefile          # 构建脚本
+├── cmd/server/         # Application entry point
+├── internal/           # Internal packages
+│   ├── auth/          # Authentication & authorization
+│   ├── config/        # Configuration management
+│   ├── db/            # Database connections
+│   ├── handlers/      # HTTP handlers
+│   ├── middleware/    # Middleware
+│   ├── models/        # Data models
+│   └── services/      # Business services
+│       ├── chat/      # Chat service
+│       ├── document/  # Document service
+│       └── rag/       # RAG core service
+├── pkg/               # Public packages
+│   ├── logger/        # Logging utilities
+│   └── utils/         # Utility functions
+├── web/               # Web resources
+│   ├── static/        # Static files
+│   │   ├── css/      # Stylesheets
+│   │   ├── js/       # JavaScript files
+│   │   └── uploads/  # Upload directory
+│   └── templates/     # HTML templates
+├── docs/              # API documentation
+├── data/              # Data files directory
+├── logs/              # Log directory
+├── docker-compose.yml     # Infrastructure services config
+├── docker-compose.dev.yml # Development environment config
+├── Dockerfile         # Production image
+├── Dockerfile.dev     # Development image
+└── Makefile          # Build scripts
 ```
 
-## API 文档
+## API Documentation
 
-启动应用后，访问以下链接查看完整的 API 文档：
-- 本地开发: http://localhost:8080/swagger/index.html
-- Docker 开发: http://localhost:8088/swagger/index.html
+After starting the application, visit the following links to view complete API documentation:
+- Local development: http://localhost:8080/swagger/index.html
+- Docker development: http://localhost:8088/swagger/index.html
 
-## 核心功能
+## Core Features
 
-### 1. 知识库管理
-- 创建、编辑、删除知识库
-- 知识库文档隔离
-- 支持多种文档格式（PDF、TXT、Markdown、JSON、CSV、HTML）
+### 1. Knowledge Base Management
+- Create, edit, and delete knowledge bases
+- Knowledge base document isolation
+- Support for multiple document formats (PDF, TXT, Markdown, JSON, CSV, HTML)
 
-### 2. 文档处理
-- 智能文档解析
-- 语义分块策略
-- 向量化索引
+### 2. Document Processing
+- Intelligent document parsing
+- Semantic chunking strategies
+- Vector indexing
 
-### 3. 智能检索
-- 语义相似度搜索
-- 多知识库联合检索
-- 结果排序优化
+### 3. Intelligent Retrieval
+- Semantic similarity search
+- Multi-knowledge base joint retrieval
+- Result ranking optimization
 
-### 4. 对话系统
-- 基于检索的上下文增强
-- 流式对话支持
-- Markdown 格式渲染
-- 对话历史管理
-- 多轮对话支持
+### 4. Chat System
+- Retrieval-based context enhancement
+- Streaming chat support
+- Markdown format rendering
+- Conversation history management
+- Multi-turn conversation support
 
-### 5. 系统管理
-- 用户权限管理
-- 系统配置
-- 统计分析
+### 5. System Management
+- User permission management
+- System configuration
+- Statistical analysis
 
-## 配置说明
+## Configuration
 
-主要配置项（.env 文件）：
+Main configuration items (.env file):
 
 ```env
-# 服务器配置
+# Server configuration
 SERVER_PORT=8080
 
-# 数据库配置
+# Database configuration
 DB_PATH=./data/eino-rag.db
 
-# Redis 配置
+# Redis configuration
 REDIS_URL=redis://localhost:6379
 REDIS_PASSWORD=
 REDIS_DB=0
 
-# Milvus 配置
+# Milvus configuration
 MILVUS_HOST=localhost
 MILVUS_PORT=19530
 
-# OpenAI 配置（可选）
+# OpenAI configuration (optional)
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=
 OPENAI_MODEL=gpt-3.5-turbo
 
-# Ollama 配置（可选）
+# Ollama configuration (optional)
 OLLAMA_URL=http://localhost:11434
 
-# 嵌入模型配置
+# Embedding model configuration
 EMBEDDING_MODEL=bge-m3
 EMBEDDING_DIMENSION=1024
 
-# RAG 配置
+# RAG configuration
 CHUNK_SIZE=500
 CHUNK_OVERLAP=50
 TOP_K=5
 
-# JWT 配置
+# JWT configuration
 JWT_SECRET=your-jwt-secret
 
-# 日志配置
+# Logging configuration
 LOG_LEVEL=info
 LOG_FILE=logs/app.log
 ```
 
-## 开发指南
+## Development Guide
 
-### 本地开发
+### Local Development
 
 ```bash
-# 使用 air 热重载
+# Use air hot reload
 make dev
 
-# 或直接运行
+# Or run directly
 make run
 ```
 
-### 运行测试
+### Run Tests
 
 ```bash
 make test
 ```
 
-### 生成 API 文档
+### Generate API Documentation
 
 ```bash
 make swagger
 ```
 
-### 清理环境
+### Clean Environment
 
 ```bash
-# 清理构建产物
+# Clean build artifacts
 make clean
 
-# 停止 Docker 服务
+# Stop Docker services
 make docker-down
 ```
 
-## 部署
+## Deployment
 
-### 开发环境部署
+### Development Environment Deployment
 
 ```bash
-# 启动所有服务
+# Start all services
 make docker-up
 docker-compose -f docker-compose.dev.yml up -d
 
-# 查看日志
+# View logs
 docker-compose -f docker-compose.dev.yml logs -f
 ```
 
-### 生产环境部署
+### Production Environment Deployment
 
-1. 构建生产镜像
+1. Build production image
 ```bash
 make build-prod
 docker build -t eino-rag:latest .
 ```
 
-2. 部署到生产环境
+2. Deploy to production
 ```bash
-# 根据需要修改 docker-compose.yml 配置
+# Modify docker-compose.yml configuration as needed
 docker-compose up -d
 ```
 
-### 系统要求
+### System Requirements
 
-- **开发环境**：2 核 CPU，4GB 内存，20GB 存储
-- **生产环境**：4 核 CPU，8GB 内存，100GB+ 存储
-- **GPU支持**：Ollama 服务可选配置 NVIDIA GPU
+- **Development Environment**: 2 CPU cores, 4GB RAM, 20GB storage
+- **Production Environment**: 4 CPU cores, 8GB RAM, 100GB+ storage
+- **GPU Support**: Optional NVIDIA GPU configuration for Ollama service
 
-## 常用命令
+## Common Commands
 
 ```bash
-# 查看可用命令
+# View available commands
 make help
 
-# 完整开发环境启动
+# Complete development environment startup
 make docker-up && docker-compose -f docker-compose.dev.yml up -d
 
-# 查看服务状态
+# Check service status
 docker-compose ps
 docker-compose -f docker-compose.dev.yml ps
 
-# 查看日志
+# View logs
 docker-compose logs -f milvus redis ollama
 docker-compose -f docker-compose.dev.yml logs -f eino-rag-dev
 
-# 进入容器调试
+# Enter container for debugging
 docker-compose -f docker-compose.dev.yml exec eino-rag-dev sh
 
-# 重启应用服务
+# Restart application service
 docker-compose -f docker-compose.dev.yml restart eino-rag-dev
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **端口冲突**
-   - 修改 docker-compose.dev.yml 中的端口映射
-   - 默认应用端口：8088，避免与本地8080冲突
+1. **Port Conflicts**
+   - Modify port mappings in docker-compose.dev.yml
+   - Default application port: 8088, avoiding conflicts with local 8080
 
-2. **Milvus 连接失败**
-   - 确保 Milvus 服务正常启动：`docker-compose logs milvus`
-   - 检查防火墙设置
+2. **Milvus Connection Failure**
+   - Ensure Milvus service is running properly: `docker-compose logs milvus`
+   - Check firewall settings
 
-3. **Redis 连接失败**
-   - 检查 Redis 服务状态：`docker-compose logs redis`
-   - 验证连接配置
+3. **Redis Connection Failure**
+   - Check Redis service status: `docker-compose logs redis`
+   - Verify connection configuration
 
-4. **文件上传失败**
-   - 确保 `web/static/uploads/` 目录存在且可写
-   - 检查磁盘空间
+4. **File Upload Failure**
+   - Ensure `web/static/uploads/` directory exists and is writable
+   - Check disk space
 
-### 日志查看
+### Log Viewing
 
 ```bash
-# 应用日志
+# Application logs
 docker-compose -f docker-compose.dev.yml logs -f eino-rag-dev
 
-# 基础服务日志
+# Infrastructure service logs
 docker-compose logs -f milvus redis ollama
 
-# 本地日志文件
+# Local log files
 tail -f logs/app.log
 ```
 
-## 贡献指南
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
-### 开发流程
+### Development Workflow
 
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
+1. Fork the project
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-## 许可证
+## License
 
 Apache License 2.0
